@@ -18,10 +18,17 @@ contract FarcasterCrowdfund is ERC721, Ownable {
     // State variables for NFT functionality
     Counters.Counter private _tokenIdCounter;
     mapping(uint256 => uint256) public tokenToCrowdfund;
-    mapping(uint256 => mapping(address => bool)) public hasClaimed;
+    // Track if a donor has received an NFT for a crowdfund
+    mapping(uint256 => mapping(address => uint256)) public donorToTokenId;
     
     // Base URI for metadata
     string private _baseMetadataURI;
+    
+    // Pause state for crowdfund creation
+    bool public paused = false;
+    
+    // Maximum duration for crowdfunds
+    uint256 public maxDuration;
     
     // USDC token address
     IERC20 public immutable usdc;
@@ -34,7 +41,7 @@ contract FarcasterCrowdfund is ERC721, Ownable {
         uint256 totalRaised;
         bool fundsClaimed;
         bool cancelled;
-        // Title and description are emitted in events, not stored on-chain
+        uint256 fid; // Optional Farcaster ID (0 if not set)
     }
     
     // Track crowdfunds count
@@ -53,48 +60,61 @@ contract FarcasterCrowdfund is ERC721, Ownable {
     // No need to store comments on-chain - just emit in events
     
     // Events
-    event CrowdfundCreated(uint256 indexed crowdfundId, address indexed owner, string title, string description, uint256 goal, uint256 endTimestamp);
+    event CrowdfundCreated(uint256 indexed crowdfundId, address indexed owner, string title, string description, uint256 goal, uint256 endTimestamp, uint256 fid);
     event DonationReceived(uint256 indexed crowdfundId, address indexed donor, uint256 amount, string comment);
     event FundsClaimed(uint256 indexed crowdfundId, address indexed owner, uint256 amount);
     event RefundIssued(uint256 indexed crowdfundId, address indexed donor, uint256 amount);
     event CrowdfundCancelled(uint256 indexed crowdfundId);
-    event NFTClaimed(uint256 indexed crowdfundId, address indexed donor, uint256 tokenId);
+    event NFTMinted(uint256 indexed crowdfundId, address indexed donor, uint256 tokenId);
     
     /**
      * @dev Constructor sets up the ERC721 token and USDC address
      * @param _usdc The address of the USDC token contract
      * @param initialOwner The initial owner of the contract
+     * @param baseURI The base URI for NFT metadata
+     * @param _maxDuration The maximum duration allowed for crowdfunds (in seconds)
      */
-    constructor(address _usdc, address initialOwner) ERC721("Farcaster Crowdfund", "CROWDFUND") Ownable(initialOwner) {
+    constructor(
+        address _usdc, 
+        address initialOwner, 
+        string memory baseURI,
+        uint256 _maxDuration
+    ) ERC721("Farcaster Crowdfund", "CROWDFUND") Ownable(initialOwner) {
         usdc = IERC20(_usdc);
-        _baseMetadataURI = "crowdfund.seedclub.com/nfts/";
+        _baseMetadataURI = baseURI;
+        maxDuration = _maxDuration > 0 ? _maxDuration : 7 days; // Default to 7 days if not specified
     }
     
     /**
-     * @dev Checks if a crowdfund exists
+     * @dev Modifier to check if a crowdfund exists
      * @param crowdfundId ID of the crowdfund to check
      */
-    function _crowdfundExists(uint256 crowdfundId) internal view returns (bool) {
-        return crowdfundId < _crowdfundIdCounter.current() && 
-               crowdfunds[crowdfundId].owner != address(0);
+    modifier crowdfundExists(uint256 crowdfundId) {
+        require(crowdfundId < _crowdfundIdCounter.current() && 
+               crowdfunds[crowdfundId].owner != address(0),
+               "Crowdfund does not exist");
+        _;
     }
-    
+
     /**
      * @dev Creates a new crowdfunding campaign
      * @param title Title of the crowdfund
      * @param description Description of the crowdfund
      * @param goal Target amount in USDC (with 6 decimals)
      * @param duration Duration in seconds for the crowdfund
+     * @param fid Optional Farcaster ID (0 if not used)
      */
     function createCrowdfund(
         string calldata title,
         string calldata description,
         uint256 goal,
-        uint256 duration
+        uint256 duration,
+        uint256 fid
     ) external returns (uint256) {
+        require(!paused, "Contract is paused");
         require(goal > 0, "Goal must be greater than 0");
         require(duration > 0, "Duration must be greater than 0");
-        require(duration <= 30 days, "Duration must be less than one month");
+        require(duration <= maxDuration, "Duration exceeds maximum allowed");
         
         uint256 crowdfundId = _crowdfundIdCounter.current();
         _crowdfundIdCounter.increment();
@@ -105,11 +125,12 @@ contract FarcasterCrowdfund is ERC721, Ownable {
             endTimestamp: block.timestamp + duration,
             totalRaised: 0,
             fundsClaimed: false,
-            cancelled: false
+            cancelled: false,
+            fid: fid
         });
         
         // Emit title and description in the event for off-chain indexing
-        emit CrowdfundCreated(crowdfundId, msg.sender, title, description, goal, block.timestamp + duration);
+        emit CrowdfundCreated(crowdfundId, msg.sender, title, description, goal, block.timestamp + duration, fid);
         
         return crowdfundId;
     }
@@ -120,16 +141,18 @@ contract FarcasterCrowdfund is ERC721, Ownable {
      * @param amount Amount of USDC to donate (with 6 decimals)
      * @param comment Optional comment with the donation
      */
-    function donate(uint256 crowdfundId, uint256 amount, string calldata comment) external {
-        require(_crowdfundExists(crowdfundId), "Crowdfund does not exist");
+    function donate(uint256 crowdfundId, uint256 amount, string calldata comment) external crowdfundExists(crowdfundId) {
         Crowdfund storage cf = crowdfunds[crowdfundId];
         
         require(amount > 0, "Amount must be greater than 0");
         require(block.timestamp < cf.endTimestamp, "Crowdfund has ended");
         require(!cf.cancelled, "Crowdfund has been cancelled");
         
+        // Track if this is a first-time donor to mint NFT
+        bool isFirstDonation = !_isDonor[crowdfundId][msg.sender];
+        
         // Update donation records
-        if (!_isDonor[crowdfundId][msg.sender]) {
+        if (isFirstDonation) {
             _crowdfundDonors[crowdfundId].push(msg.sender);
             _isDonor[crowdfundId][msg.sender] = true;
         }
@@ -143,14 +166,26 @@ contract FarcasterCrowdfund is ERC721, Ownable {
         usdc.safeTransferFrom(msg.sender, address(this), amount);
         
         emit DonationReceived(crowdfundId, msg.sender, amount, comment);
+        
+        // Mint an NFT for first-time donors
+        if (isFirstDonation) {
+            uint256 tokenId = _tokenIdCounter.current();
+            _tokenIdCounter.increment();
+            
+            tokenToCrowdfund[tokenId] = crowdfundId;
+            donorToTokenId[crowdfundId][msg.sender] = tokenId;
+            
+            _safeMint(msg.sender, tokenId);
+            
+            emit NFTMinted(crowdfundId, msg.sender, tokenId);
+        }
     }
     
     /**
      * @dev Allows the crowdfund creator to claim funds if goal is met
      * @param crowdfundId ID of the crowdfund
      */
-    function claimFunds(uint256 crowdfundId) external {
-        require(_crowdfundExists(crowdfundId), "Crowdfund does not exist");
+    function claimFunds(uint256 crowdfundId) external crowdfundExists(crowdfundId) {
         Crowdfund storage cf = crowdfunds[crowdfundId];
         
         require(msg.sender == cf.owner, "Not the crowdfund owner");
@@ -171,8 +206,7 @@ contract FarcasterCrowdfund is ERC721, Ownable {
      * @dev Allows donors to claim refunds if goal is not met and crowdfund ended
      * @param crowdfundId ID of the crowdfund
      */
-    function claimRefund(uint256 crowdfundId) external {
-        require(_crowdfundExists(crowdfundId), "Crowdfund does not exist");
+    function claimRefund(uint256 crowdfundId) external crowdfundExists(crowdfundId) {
         Crowdfund storage cf = crowdfunds[crowdfundId];
         
         require(
@@ -200,8 +234,7 @@ contract FarcasterCrowdfund is ERC721, Ownable {
      * @dev Allows the owner to cancel a crowdfund
      * @param crowdfundId ID of the crowdfund
      */
-    function cancelCrowdfund(uint256 crowdfundId) external {
-        require(_crowdfundExists(crowdfundId), "Crowdfund does not exist");
+    function cancelCrowdfund(uint256 crowdfundId) external crowdfundExists(crowdfundId) {
         Crowdfund storage cf = crowdfunds[crowdfundId];
         
         require(msg.sender == cf.owner, "Not the crowdfund owner");
@@ -214,36 +247,20 @@ contract FarcasterCrowdfund is ERC721, Ownable {
     }
     
     /**
-     * @dev Allows a donor to claim an NFT for a successful crowdfund
+     * @dev Returns the token ID for a donor of a specific crowdfund
      * @param crowdfundId ID of the crowdfund
+     * @param donor Address of the donor
+     * @return tokenId The donor's NFT token ID (0 if none)
      */
-    function claimNFT(uint256 crowdfundId) external {
-        require(_crowdfundExists(crowdfundId), "Crowdfund does not exist");
-        Crowdfund storage cf = crowdfunds[crowdfundId];
-        
-        require(block.timestamp > cf.endTimestamp, "Crowdfund not ended yet");
-        require(cf.totalRaised >= cf.goal, "Funding goal not met");
-        require(donations[crowdfundId][msg.sender] > 0, "Not a donor");
-        require(!hasClaimed[crowdfundId][msg.sender], "NFT already claimed");
-        require(!cf.cancelled, "Crowdfund was cancelled");
-        
-        uint256 tokenId = _tokenIdCounter.current();
-        _tokenIdCounter.increment();
-        
-        hasClaimed[crowdfundId][msg.sender] = true;
-        tokenToCrowdfund[tokenId] = crowdfundId;
-        
-        _safeMint(msg.sender, tokenId);
-        
-        emit NFTClaimed(crowdfundId, msg.sender, tokenId);
+    function getDonorTokenId(uint256 crowdfundId, address donor) external view crowdfundExists(crowdfundId) returns (uint256) {
+        return donorToTokenId[crowdfundId][donor];
     }
     
     /**
      * @dev Returns the list of donors for a crowdfund
      * @param crowdfundId ID of the crowdfund
      */
-    function getDonors(uint256 crowdfundId) external view returns (address[] memory) {
-        require(_crowdfundExists(crowdfundId), "Crowdfund does not exist");
+    function getDonors(uint256 crowdfundId) external view crowdfundExists(crowdfundId) returns (address[] memory) {
         return _crowdfundDonors[crowdfundId];
     }
     
@@ -253,6 +270,23 @@ contract FarcasterCrowdfund is ERC721, Ownable {
      */
     function setBaseURI(string calldata newBaseURI) external onlyOwner {
         _baseMetadataURI = newBaseURI;
+    }
+    
+    /**
+     * @dev Toggle the paused state (only callable by owner)
+     * @param _paused New paused state
+     */
+    function setPaused(bool _paused) external onlyOwner {
+        paused = _paused;
+    }
+    
+    /**
+     * @dev Update the maximum allowed duration for crowdfunds (only callable by owner)
+     * @param _maxDuration New maximum duration in seconds
+     */
+    function setMaxDuration(uint256 _maxDuration) external onlyOwner {
+        require(_maxDuration > 0, "Duration must be greater than 0");
+        maxDuration = _maxDuration;
     }
     
     /**
