@@ -100,6 +100,25 @@ contract FarcasterCrowdfund is ERC721, Ownable {
         uint256 tokenId
     );
 
+    // Admin events
+    event BaseURIUpdated(
+        string oldBaseURI,
+        string newBaseURI,
+        address indexed owner
+    );
+
+    event PauseStateUpdated(
+        bool oldPauseState,
+        bool newPauseState,
+        address indexed owner
+    );
+
+    event MaxDurationUpdated(
+        uint256 oldMaxDuration,
+        uint256 newMaxDuration,
+        address indexed owner
+    );
+
     /**
      * @dev Constructor sets up the ERC721 token and USDC address
      * @param _usdc The address of the USDC token contract
@@ -326,7 +345,9 @@ contract FarcasterCrowdfund is ERC721, Ownable {
      * @param newBaseURI The new base URI for metadata
      */
     function setBaseURI(string calldata newBaseURI) external onlyOwner {
+        string memory oldBaseURI = _baseMetadataURI;
         _baseMetadataURI = newBaseURI;
+        emit BaseURIUpdated(oldBaseURI, newBaseURI, msg.sender);
     }
 
     /**
@@ -334,7 +355,9 @@ contract FarcasterCrowdfund is ERC721, Ownable {
      * @param _paused New paused state
      */
     function setPaused(bool _paused) external onlyOwner {
+        bool oldPauseState = paused;
         paused = _paused;
+        emit PauseStateUpdated(oldPauseState, _paused, msg.sender);
     }
 
     /**
@@ -343,7 +366,9 @@ contract FarcasterCrowdfund is ERC721, Ownable {
      */
     function setMaxDuration(uint256 _maxDuration) external onlyOwner {
         require(_maxDuration > 0, "Duration must be greater than 0");
+        uint256 oldMaxDuration = maxDuration;
         maxDuration = _maxDuration;
+        emit MaxDurationUpdated(oldMaxDuration, _maxDuration, msg.sender);
     }
 
     /**
