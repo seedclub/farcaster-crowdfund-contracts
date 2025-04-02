@@ -16,7 +16,7 @@ contract DeployBase is Script {
 
     function run() public {
         // Retrieve deployer private key from env variable
-        uint256 deployerPrivateKey = vm.envUint("PRIVATE_KEY");
+        uint256 deployerPrivateKey = vm.envUint("GOERLI_PRIV_KEY");
         address deployerAddress = vm.addr(deployerPrivateKey);
         
         console.log("Deployer address:", deployerAddress);

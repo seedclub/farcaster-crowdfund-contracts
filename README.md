@@ -71,17 +71,17 @@ forge install
 cd frontend && npm install && cd ..
 ```
 
-3. Create a `.env` file based on `.env.example`:
+3. Set up your environment variables:
+
+```bash
+export GOERLI_PRIV_KEY=your_private_key_here
+export BASESCAN_API_KEY=your_basescan_api_key
+```
+
+4. Create a `.env` file based on `.env.example`:
 
 ```bash
 cp .env.example .env
-```
-
-4. Edit the `.env` file with your private key and other configuration:
-
-```
-PRIVATE_KEY=your_private_key_here
-ETHERSCAN_API_KEY=your_basescan_api_key
 ```
 
 ## Testing
@@ -109,15 +109,13 @@ forge test --gas-report
 ### Deploy to Base Sepolia Testnet
 
 ```bash
-source .env
-forge script script/DeployBaseSepolia.s.sol:DeployBaseSepolia --rpc-url https://sepolia.base.org --broadcast --verify
+forge script script/DeployBaseSepolia.s.sol:DeployBaseSepolia --rpc-url https://sepolia.base.org --broadcast --verify --private-key $GOERLI_PRIV_KEY --etherscan-api-key $BASESCAN_API_KEY
 ```
 
 ### Deploy to Base Mainnet
 
 ```bash
-source .env
-forge script script/DeployBase.s.sol:DeployBase --rpc-url https://mainnet.base.org --broadcast --verify
+forge script script/DeployBase.s.sol:DeployBase --rpc-url https://mainnet.base.org --broadcast --verify --private-key $GOERLI_PRIV_KEY --etherscan-api-key $BASESCAN_API_KEY
 ```
 
 ## Important Addresses
@@ -145,7 +143,7 @@ As the contract owner, you can:
 Example of updating the base URI:
 
 ```bash
-cast send --private-key $PRIVATE_KEY \
+cast send --private-key $GOERLI_PRIV_KEY \
   --rpc-url https://mainnet.base.org \
   <CONTRACT_ADDRESS> \
   "setBaseURI(string)" \
