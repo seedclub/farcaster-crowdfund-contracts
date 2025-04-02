@@ -60,7 +60,7 @@ contract FarcasterCrowdfund is ERC721, Ownable {
     // No need to store comments on-chain - just emit in events
     
     // Events
-    event CrowdfundCreated(uint256 indexed crowdfundId, address indexed owner, string title, string description, uint256 goal, uint256 endTimestamp, uint256 fid);
+    event CrowdfundCreated(uint256 indexed crowdfundId, address indexed owner, string goal, string description, uint256 goal, uint256 endTimestamp, uint256 fid);
     event DonationReceived(uint256 indexed crowdfundId, address indexed donor, uint256 amount, string comment);
     event FundsClaimed(uint256 indexed crowdfundId, address indexed owner, uint256 amount);
     event RefundIssued(uint256 indexed crowdfundId, address indexed donor, uint256 amount);
@@ -98,14 +98,14 @@ contract FarcasterCrowdfund is ERC721, Ownable {
 
     /**
      * @dev Creates a new crowdfunding campaign
-     * @param title Title of the crowdfund
+     * @param Goal Goal of the crowdfund
      * @param description Description of the crowdfund
      * @param goal Target amount in USDC (with 6 decimals)
      * @param duration Duration in seconds for the crowdfund
      * @param fid Optional Farcaster ID (0 if not used)
      */
     function createCrowdfund(
-        string calldata title,
+        string calldata goal,
         string calldata description,
         uint256 goal,
         uint256 duration,
@@ -129,8 +129,8 @@ contract FarcasterCrowdfund is ERC721, Ownable {
             fid: fid
         });
         
-        // Emit title and description in the event for off-chain indexing
-        emit CrowdfundCreated(crowdfundId, msg.sender, title, description, goal, block.timestamp + duration, fid);
+        // Emit goal and description in the event for off-chain indexing
+        emit CrowdfundCreated(crowdfundId, msg.sender, goal, description, goal, block.timestamp + duration, fid);
         
         return crowdfundId;
     }
