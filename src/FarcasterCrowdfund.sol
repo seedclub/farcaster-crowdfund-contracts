@@ -5,7 +5,6 @@ import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
-import "@openzeppelin/contracts/utils/Counters.sol";
 
 /**
  * @title FarcasterCrowdfund
@@ -13,10 +12,9 @@ import "@openzeppelin/contracts/utils/Counters.sol";
  */
 contract FarcasterCrowdfund is ERC721, Ownable {
     using SafeERC20 for IERC20;
-    using Counters for Counters.Counter;
     
     // State variables for NFT functionality
-    Counters.Counter private _tokenIdCounter;
+    uint256 private _tokenIdCounter;
     mapping(uint256 => uint256) public tokenToCrowdfund;
     // Track if a donor has received an NFT for a crowdfund
     mapping(uint256 => mapping(address => uint256)) public donorToTokenId;
@@ -45,7 +43,7 @@ contract FarcasterCrowdfund is ERC721, Ownable {
     }
     
     // Track crowdfunds count
-    Counters.Counter private _crowdfundIdCounter;
+    uint256 private _crowdfundIdCounter;
     
     // Mapping from crowdfundId to Crowdfund data
     mapping(uint256 => Crowdfund) public crowdfunds;
@@ -55,12 +53,20 @@ contract FarcasterCrowdfund is ERC721, Ownable {
     
     // Track all donors for each crowdfund (for NFT claims)
     mapping(uint256 => address[]) private _crowdfundDonors;
-    mapping(uint256 => mapping(address => bool)) private _isDonor;
+    mapping(uint256 => mapping(address => bool)) public isDonor;
     
     // No need to store comments on-chain - just emit in events
     
     // Events
-    event CrowdfundCreated(uint256 indexed crowdfundId, address indexed owner, string goal, string description, uint256 goal, uint256 endTimestamp, uint256 fid);
+    event CrowdfundCreated(
+        uint256 indexed crowdfundId, 
+        address indexed owner, 
+        string goalText, 
+        string description, 
+        uint256 goalAmount, 
+        uint256 endTimestamp, 
+        uint256 fid
+    );
     event DonationReceived(uint256 indexed crowdfundId, address indexed donor, uint256 amount, string comment);
     event FundsClaimed(uint256 indexed crowdfundId, address indexed owner, uint256 amount);
     event RefundIssued(uint256 indexed crowdfundId, address indexed donor, uint256 amount);
@@ -90,7 +96,7 @@ contract FarcasterCrowdfund is ERC721, Ownable {
      * @param crowdfundId ID of the crowdfund to check
      */
     modifier crowdfundExists(uint256 crowdfundId) {
-        require(crowdfundId < _crowdfundIdCounter.current() && 
+        require(crowdfundId < _crowdfundIdCounter && 
                crowdfunds[crowdfundId].owner != address(0),
                "Crowdfund does not exist");
         _;
@@ -98,30 +104,30 @@ contract FarcasterCrowdfund is ERC721, Ownable {
 
     /**
      * @dev Creates a new crowdfunding campaign
-     * @param Goal Goal of the crowdfund
+     * @param goalText Goal description of the crowdfund
      * @param description Description of the crowdfund
-     * @param goal Target amount in USDC (with 6 decimals)
+     * @param goalAmount Target amount in USDC (with 6 decimals)
      * @param duration Duration in seconds for the crowdfund
      * @param fid Optional Farcaster ID (0 if not used)
      */
     function createCrowdfund(
-        string calldata goal,
+        string calldata goalText,
         string calldata description,
-        uint256 goal,
+        uint256 goalAmount,
         uint256 duration,
         uint256 fid
     ) external returns (uint256) {
         require(!paused, "Contract is paused");
-        require(goal > 0, "Goal must be greater than 0");
+        require(goalAmount > 0, "Goal must be greater than 0");
         require(duration > 0, "Duration must be greater than 0");
         require(duration <= maxDuration, "Duration exceeds maximum allowed");
         
-        uint256 crowdfundId = _crowdfundIdCounter.current();
-        _crowdfundIdCounter.increment();
+        uint256 crowdfundId = _crowdfundIdCounter;
+        _crowdfundIdCounter++;
         
         crowdfunds[crowdfundId] = Crowdfund({
             owner: msg.sender,
-            goal: goal,
+            goal: goalAmount,
             endTimestamp: block.timestamp + duration,
             totalRaised: 0,
             fundsClaimed: false,
@@ -130,7 +136,7 @@ contract FarcasterCrowdfund is ERC721, Ownable {
         });
         
         // Emit goal and description in the event for off-chain indexing
-        emit CrowdfundCreated(crowdfundId, msg.sender, goal, description, goal, block.timestamp + duration, fid);
+        emit CrowdfundCreated(crowdfundId, msg.sender, goalText, description, goalAmount, block.timestamp + duration, fid);
         
         return crowdfundId;
     }
@@ -149,18 +155,16 @@ contract FarcasterCrowdfund is ERC721, Ownable {
         require(!cf.cancelled, "Crowdfund has been cancelled");
         
         // Track if this is a first-time donor to mint NFT
-        bool isFirstDonation = !_isDonor[crowdfundId][msg.sender];
+        bool isFirstDonation = !isDonor[crowdfundId][msg.sender];
         
         // Update donation records
         if (isFirstDonation) {
             _crowdfundDonors[crowdfundId].push(msg.sender);
-            _isDonor[crowdfundId][msg.sender] = true;
+            isDonor[crowdfundId][msg.sender] = true;
         }
         
         donations[crowdfundId][msg.sender] += amount;
         cf.totalRaised += amount;
-        
-        // No need to store comments - just emit in the event
         
         // Transfer USDC from donor to this contract
         usdc.safeTransferFrom(msg.sender, address(this), amount);
@@ -169,12 +173,14 @@ contract FarcasterCrowdfund is ERC721, Ownable {
         
         // Mint an NFT for first-time donors
         if (isFirstDonation) {
-            uint256 tokenId = _tokenIdCounter.current();
-            _tokenIdCounter.increment();
+            // Increment counter first to get the next token ID
+            uint256 tokenId = _tokenIdCounter++;
             
+            // Set mappings before minting to ensure proper state
             tokenToCrowdfund[tokenId] = crowdfundId;
             donorToTokenId[crowdfundId][msg.sender] = tokenId;
             
+            // Use _safeMint for additional safety checks
             _safeMint(msg.sender, tokenId);
             
             emit NFTMinted(crowdfundId, msg.sender, tokenId);

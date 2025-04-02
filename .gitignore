@@ -1,6 +1,7 @@
 # Compiler files
 cache/
 out/
+artifacts/
 
 # Ignores development broadcast logs
 !/broadcast
@@ -12,3 +13,63 @@ docs/
 
 # Dotenv file
 .env
+.env.*
+
+# IDE files
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Foundry specific
+forge-cache/
+coverage/
+coverage.json
+coverage.lcov
+
+# Node modules (if using any JavaScript tools)
+node_modules/
+
+# Build output
+dist/
+build/
+
+# Test files
+test/fixtures/
+test/fork/
+
+# macOS system files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Private keys and mnemonics
+**/private.json
+**/mnemonic.txt
+**/mnemonic
+**/accounts.json
+**/accounts.txt
+**/private_keys.json
+**/private_keys.txt
+**/secrets.json
+**/secrets.txt
+**/keys.json
+**/keys.txt
+**/wallet.json
+**/wallet.txt
+**/keystore.json
+**/keystore.txt
+**/key.json
+**/key.txt
+**/key
+**/private
+**/private_key
+**/privatekey
+**/mnemonic
+**/seed
+**/seed.txt
+**/seed.json
