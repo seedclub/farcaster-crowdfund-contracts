@@ -55,6 +55,43 @@ contract FarcasterCrowdfundTest is Test {
     string public constant CONTENT_ID_16 = "content-16"; // For View function tests
     string public constant DONATION_ID_16 = "donation-16-1";
 
+    // Convert string constants to bytes32 hashes
+    bytes32 public constant CONTENT_HASH_1 = keccak256(abi.encodePacked(CONTENT_ID_1));
+    bytes32 public constant DONATION_HASH_1 = keccak256(abi.encodePacked(DONATION_ID_1));
+    bytes32 public constant CONTENT_HASH_2 = keccak256(abi.encodePacked(CONTENT_ID_2));
+    bytes32 public constant DONATION_HASH_2 = keccak256(abi.encodePacked(DONATION_ID_2));
+    bytes32 public constant CONTENT_HASH_3 = keccak256(abi.encodePacked(CONTENT_ID_3));
+    bytes32 public constant DONATION_HASH_3_1 = keccak256(abi.encodePacked(DONATION_ID_3_1));
+    bytes32 public constant DONATION_HASH_3_2 = keccak256(abi.encodePacked(DONATION_ID_3_2));
+    bytes32 public constant CONTENT_HASH_4 = keccak256(abi.encodePacked(CONTENT_ID_4));
+    bytes32 public constant DONATION_HASH_4_1 = keccak256(abi.encodePacked(DONATION_ID_4_1));
+    bytes32 public constant DONATION_HASH_4_2 = keccak256(abi.encodePacked(DONATION_ID_4_2));
+    bytes32 public constant CONTENT_HASH_5 = keccak256(abi.encodePacked(CONTENT_ID_5));
+    bytes32 public constant DONATION_HASH_5 = keccak256(abi.encodePacked(DONATION_ID_5));
+    bytes32 public constant CONTENT_HASH_6 = keccak256(abi.encodePacked(CONTENT_ID_6));
+    bytes32 public constant DONATION_HASH_6 = keccak256(abi.encodePacked(DONATION_ID_6));
+    bytes32 public constant CONTENT_HASH_7 = keccak256(abi.encodePacked(CONTENT_ID_7));
+    bytes32 public constant DONATION_HASH_7 = keccak256(abi.encodePacked(DONATION_ID_7));
+    bytes32 public constant CONTENT_HASH_8 = keccak256(abi.encodePacked(CONTENT_ID_8));
+    bytes32 public constant DONATION_HASH_8 = keccak256(abi.encodePacked(DONATION_ID_8));
+    bytes32 public constant CONTENT_HASH_9 = keccak256(abi.encodePacked(CONTENT_ID_9));
+    bytes32 public constant DONATION_HASH_9_1 = keccak256(abi.encodePacked(DONATION_ID_9_1));
+    bytes32 public constant DONATION_HASH_9_2 = keccak256(abi.encodePacked(DONATION_ID_9_2));
+    bytes32 public constant CONTENT_HASH_10 = keccak256(abi.encodePacked(CONTENT_ID_10));
+    bytes32 public constant DONATION_HASH_10 = keccak256(abi.encodePacked(DONATION_ID_10));
+    bytes32 public constant CONTENT_HASH_11 = keccak256(abi.encodePacked(CONTENT_ID_11));
+    bytes32 public constant CONTENT_HASH_12 = keccak256(abi.encodePacked(CONTENT_ID_12));
+    bytes32 public constant CONTENT_HASH_13 = keccak256(abi.encodePacked(CONTENT_ID_13));
+    bytes32 public constant DONATION_HASH_13_1 = keccak256(abi.encodePacked(DONATION_ID_13_1));
+    bytes32 public constant DONATION_HASH_13_2 = keccak256(abi.encodePacked(DONATION_ID_13_2));
+    bytes32 public constant CONTENT_HASH_14 = keccak256(abi.encodePacked(CONTENT_ID_14));
+    bytes32 public constant DONATION_HASH_14 = keccak256(abi.encodePacked(DONATION_ID_14));
+    bytes32 public constant CONTENT_HASH_15 = keccak256(abi.encodePacked(CONTENT_ID_15));
+    bytes32 public constant DONATION_HASH_15_1 = keccak256(abi.encodePacked(DONATION_ID_15_1));
+    bytes32 public constant DONATION_HASH_15_2 = keccak256(abi.encodePacked(DONATION_ID_15_2));
+    bytes32 public constant CONTENT_HASH_16 = keccak256(abi.encodePacked(CONTENT_ID_16));
+    bytes32 public constant DONATION_HASH_16 = keccak256(abi.encodePacked(DONATION_ID_16));
+
     uint128 public constant GOAL_AMOUNT = 100 * 10**6; // 100 USDC
     uint128 public constant DONATION_AMOUNT_1 = 50 * 10**6; // 50 USDC
     uint128 public constant DONATION_AMOUNT_2 = 60 * 10**6; // 60 USDC
@@ -92,13 +129,13 @@ contract FarcasterCrowdfundTest is Test {
     function test_CreateCrowdfund() public {
         // Setup
         vm.prank(projectOwner);
-        string memory contentId = CONTENT_ID_1; // Changed to string
+        bytes32 contentHash = CONTENT_HASH_1;
 
         // Create a crowdfund
         uint128 crowdfundId = crowdfund.createCrowdfund(
             GOAL_AMOUNT,
             5 days,
-            contentId
+            contentHash
         );
 
         // Assert - Updated struct field order and types
@@ -106,7 +143,7 @@ contract FarcasterCrowdfundTest is Test {
             uint128 goal,
             uint128 totalRaised,
             uint64 endTimestamp,
-            string memory cfContentId, // Changed to string memory
+            bytes32 cfContentIdHash,
             address cfOwner,
             bool fundsClaimed,
             bool cancelled
@@ -115,7 +152,7 @@ contract FarcasterCrowdfundTest is Test {
         assertEq(goal, GOAL_AMOUNT);
         assertEq(totalRaised, 0);
         assertEq(endTimestamp, uint64(block.timestamp + 5 days));
-        assertEq(cfContentId, contentId);
+        assertEq(cfContentIdHash, contentHash);
         assertEq(cfOwner, projectOwner);
         assertEq(fundsClaimed, false);
         assertEq(cancelled, false);
@@ -124,12 +161,12 @@ contract FarcasterCrowdfundTest is Test {
     function test_DonateAndMintNFT() public {
         // Setup - create a crowdfund
         vm.prank(projectOwner);
-        string memory contentId = CONTENT_ID_2; // Changed to string
-        string memory donationId = DONATION_ID_2; // Changed to string
+        bytes32 contentHash = CONTENT_HASH_2;
+        bytes32 donationHash = DONATION_HASH_2;
         uint128 crowdfundId = crowdfund.createCrowdfund(
             GOAL_AMOUNT,
             5 days,
-            contentId
+            contentHash
         );
         
         // Approve USDC spending
@@ -140,7 +177,7 @@ contract FarcasterCrowdfundTest is Test {
         console.log("Before donation - isDonor:", crowdfund.isDonor(crowdfundId, donor1));
         
         // Donate to the crowdfund
-        crowdfund.donate(crowdfundId, donationId, DONATION_AMOUNT_1);
+        crowdfund.donate(crowdfundId, donationHash, DONATION_AMOUNT_1);
         vm.stopPrank();
         
         // Debug: Check if donor is marked as donor after donation
@@ -164,22 +201,22 @@ contract FarcasterCrowdfundTest is Test {
     function test_MultipleDonations() public {
         // Setup - create a crowdfund
         vm.prank(projectOwner);
-        string memory contentId = CONTENT_ID_3; // Changed to string
+        bytes32 contentHash = CONTENT_HASH_3;
         uint128 crowdfundId = crowdfund.createCrowdfund(
             GOAL_AMOUNT,
             5 days,
-            contentId
+            contentHash
         );
         
         // First donation
         vm.startPrank(donor1);
         usdc.approve(address(crowdfund), DONATION_AMOUNT_1);
-        crowdfund.donate(crowdfundId, DONATION_ID_3_1, DONATION_AMOUNT_1); // Use unique donation ID
+        crowdfund.donate(crowdfundId, DONATION_HASH_3_1, DONATION_AMOUNT_1);
         uint128 firstTokenId = crowdfund.donorToTokenId(crowdfundId, donor1);
         
         // Second donation from same donor
         usdc.approve(address(crowdfund), DONATION_AMOUNT_3);
-        crowdfund.donate(crowdfundId, DONATION_ID_3_2, DONATION_AMOUNT_3); // Use unique donation ID
+        crowdfund.donate(crowdfundId, DONATION_HASH_3_2, DONATION_AMOUNT_3);
         uint128 secondTokenId = crowdfund.donorToTokenId(crowdfundId, donor1);
         vm.stopPrank();
         
@@ -193,22 +230,22 @@ contract FarcasterCrowdfundTest is Test {
     function test_ClaimFunds() public {
         // Setup - create a crowdfund
         vm.prank(projectOwner);
-        string memory contentId = CONTENT_ID_4; // Changed to string
+        bytes32 contentHash = CONTENT_HASH_4;
         uint128 crowdfundId = crowdfund.createCrowdfund(
             GOAL_AMOUNT,
             5 days,
-            contentId
+            contentHash
         );
         
         // Make donations to meet the goal
         vm.startPrank(donor1);
         usdc.approve(address(crowdfund), DONATION_AMOUNT_2);
-        crowdfund.donate(crowdfundId, DONATION_ID_4_1, DONATION_AMOUNT_2); // Use unique donation ID
+        crowdfund.donate(crowdfundId, DONATION_HASH_4_1, DONATION_AMOUNT_2);
         vm.stopPrank();
         
         vm.startPrank(donor2);
         usdc.approve(address(crowdfund), DONATION_AMOUNT_3);
-        crowdfund.donate(crowdfundId, DONATION_ID_4_2, DONATION_AMOUNT_3); // Use unique donation ID
+        crowdfund.donate(crowdfundId, DONATION_HASH_4_2, DONATION_AMOUNT_3);
         vm.stopPrank();
         
         // Warp to after the end time
@@ -235,17 +272,17 @@ contract FarcasterCrowdfundTest is Test {
     function test_ClaimRefund() public {
         // Setup - create a crowdfund
         vm.prank(projectOwner);
-        string memory contentId = CONTENT_ID_5; // Changed to string
+        bytes32 contentHash = CONTENT_HASH_5;
         uint128 crowdfundId = crowdfund.createCrowdfund(
             GOAL_AMOUNT,
             5 days,
-            contentId
+            contentHash
         );
         
         // Make a donation
         vm.startPrank(donor1);
         usdc.approve(address(crowdfund), DONATION_AMOUNT_1);
-        crowdfund.donate(crowdfundId, DONATION_ID_5, DONATION_AMOUNT_1); // Use unique donation ID
+        crowdfund.donate(crowdfundId, DONATION_HASH_5, DONATION_AMOUNT_1);
         vm.stopPrank();
         
         // Warp to after the end time
@@ -272,17 +309,17 @@ contract FarcasterCrowdfundTest is Test {
     function test_CancelCrowdfund() public {
         // Setup - create a crowdfund
         vm.prank(projectOwner);
-        string memory contentId = CONTENT_ID_6; // Changed to string
+        bytes32 contentHash = CONTENT_HASH_6;
         uint128 crowdfundId = crowdfund.createCrowdfund(
             GOAL_AMOUNT,
             5 days,
-            contentId
+            contentHash
         );
         
         // Make a donation
         vm.startPrank(donor1);
         usdc.approve(address(crowdfund), DONATION_AMOUNT_1);
-        crowdfund.donate(crowdfundId, DONATION_ID_6, DONATION_AMOUNT_1); // Use unique donation ID
+        crowdfund.donate(crowdfundId, DONATION_HASH_6, DONATION_AMOUNT_1);
         vm.stopPrank();
         
         // Cancel the crowdfund
@@ -301,26 +338,26 @@ contract FarcasterCrowdfundTest is Test {
     function test_RevertWhen_DonateAfterEnd() public {
         // Setup
         vm.prank(projectOwner);
-        string memory contentId = CONTENT_ID_7; // Changed to string
-        uint128 crowdfundId = crowdfund.createCrowdfund(GOAL_AMOUNT, 1 days, contentId);
+        bytes32 contentHash = CONTENT_HASH_7;
+        uint128 crowdfundId = crowdfund.createCrowdfund(GOAL_AMOUNT, 1 days, contentHash);
         vm.warp(block.timestamp + 2 days); // Warp past end time
 
         // Attempt donation
         vm.startPrank(donor1);
         usdc.approve(address(crowdfund), 10 * 10**6);
         vm.expectRevert("Crowdfund has ended");
-        crowdfund.donate(crowdfundId, DONATION_ID_7, 10 * 10**6); // Use unique donation ID
+        crowdfund.donate(crowdfundId, DONATION_HASH_7, 10 * 10**6);
         vm.stopPrank();
     }
 
     function test_RevertWhen_ClaimFundsGoalNotMet() public {
         // Setup
         vm.prank(projectOwner);
-        string memory contentId = CONTENT_ID_8; // Changed to string
-        uint128 crowdfundId = crowdfund.createCrowdfund(GOAL_AMOUNT, 5 days, contentId);
+        bytes32 contentHash = CONTENT_HASH_8;
+        uint128 crowdfundId = crowdfund.createCrowdfund(GOAL_AMOUNT, 5 days, contentHash);
         vm.startPrank(donor1);
         usdc.approve(address(crowdfund), DONATION_AMOUNT_1);
-        crowdfund.donate(crowdfundId, DONATION_ID_8, DONATION_AMOUNT_1); // Use unique donation ID
+        crowdfund.donate(crowdfundId, DONATION_HASH_8, DONATION_AMOUNT_1);
         vm.stopPrank();
         vm.warp(block.timestamp + 6 days); // Warp past end time
 
@@ -333,12 +370,12 @@ contract FarcasterCrowdfundTest is Test {
     function test_RevertWhen_ClaimRefundGoalMet() public {
         // Setup - create a crowdfund and meet the goal
         vm.prank(projectOwner);
-        string memory contentId = CONTENT_ID_1; // Changed to string
-        uint128 crowdfundId = crowdfund.createCrowdfund(GOAL_AMOUNT, 5 days, contentId);
+        bytes32 contentHash = CONTENT_HASH_1;
+        uint128 crowdfundId = crowdfund.createCrowdfund(GOAL_AMOUNT, 5 days, contentHash);
         
         vm.startPrank(donor1);
         usdc.approve(address(crowdfund), GOAL_AMOUNT);
-        crowdfund.donate(crowdfundId, DONATION_ID_1, GOAL_AMOUNT); // Use unique donation ID
+        crowdfund.donate(crowdfundId, DONATION_HASH_1, GOAL_AMOUNT);
         vm.stopPrank();
         
         vm.warp(block.timestamp + 6 days); // Warp past end time
@@ -352,11 +389,11 @@ contract FarcasterCrowdfundTest is Test {
     function test_RevertWhen_CancelAfterClaim() public {
         // Setup - create, fund, and claim
         vm.prank(projectOwner);
-        string memory contentId = CONTENT_ID_2; // Changed to string
-        uint128 crowdfundId = crowdfund.createCrowdfund(GOAL_AMOUNT, 5 days, contentId);
+        bytes32 contentHash = CONTENT_HASH_2;
+        uint128 crowdfundId = crowdfund.createCrowdfund(GOAL_AMOUNT, 5 days, contentHash);
         vm.startPrank(donor1);
         usdc.approve(address(crowdfund), GOAL_AMOUNT);
-        crowdfund.donate(crowdfundId, DONATION_ID_2, GOAL_AMOUNT); // Use unique donation ID
+        crowdfund.donate(crowdfundId, DONATION_HASH_2, GOAL_AMOUNT);
         vm.stopPrank();
         vm.warp(block.timestamp + 6 days);
         vm.prank(projectOwner);
@@ -385,9 +422,9 @@ contract FarcasterCrowdfundTest is Test {
         crowdfund.setBaseURI(newBaseURI);
 
         // Verify with tokenURI (requires minting a token first)
-        uint128 crowdfundId = _createDefaultCrowdfund(CONTENT_ID_10); // Use string ID
+        uint128 crowdfundId = _createDefaultCrowdfund(CONTENT_HASH_10); // Use bytes32
         vm.prank(donor1);
-        crowdfund.donate(crowdfundId, DONATION_ID_10, DONATION_AMOUNT_1); // Use unique donation ID
+        crowdfund.donate(crowdfundId, DONATION_HASH_10, DONATION_AMOUNT_1); // Use bytes32
         uint128 tokenId = crowdfund.donorToTokenId(crowdfundId, donor1);
 
         assertEq(crowdfund.tokenURI(tokenId), string(abi.encodePacked(newBaseURI, "0")));
@@ -485,7 +522,7 @@ contract FarcasterCrowdfundTest is Test {
 
         vm.prank(projectOwner);
         vm.expectRevert("Contract is paused");
-        crowdfund.createCrowdfund(GOAL_AMOUNT, 5 days, CONTENT_ID_1);
+        crowdfund.createCrowdfund(GOAL_AMOUNT, 5 days, CONTENT_HASH_1);
     }
 
     // ==========================================
@@ -498,28 +535,28 @@ contract FarcasterCrowdfundTest is Test {
         crowdfund.createCrowdfund(
             GOAL_AMOUNT, 
             DEFAULT_MAX_DURATION + 1 days, // Exceed max
-            CONTENT_ID_12 // Use string ID
+            CONTENT_HASH_12 // Use bytes32
         );
     }
 
     function test_RevertWhen_CreateGoalZero() public {
         vm.prank(projectOwner);
         vm.expectRevert("Goal must be greater than 0");
-        crowdfund.createCrowdfund(0, 5 days, CONTENT_ID_12); // Use string ID
+        crowdfund.createCrowdfund(0, 5 days, CONTENT_HASH_12); // Use bytes32
     }
 
     function test_RevertWhen_CreateDurationZero() public {
         vm.prank(projectOwner);
         vm.expectRevert("Duration must be greater than 0");
-        crowdfund.createCrowdfund(GOAL_AMOUNT, 0, CONTENT_ID_12); // Use string ID
+        crowdfund.createCrowdfund(GOAL_AMOUNT, 0, CONTENT_HASH_12); // Use bytes32
     }
 
     function test_RevertWhen_DonateAmountZero() public {
-        uint128 crowdfundId = _createDefaultCrowdfund(CONTENT_ID_12); // Use string ID
+        uint128 crowdfundId = _createDefaultCrowdfund(CONTENT_HASH_12); // Use bytes32
 
         vm.prank(donor1);
         vm.expectRevert("Amount must be greater than 0");
-        crowdfund.donate(crowdfundId, DONATION_ID_1, 0); // Use unique donation ID
+        crowdfund.donate(crowdfundId, DONATION_HASH_1, 0); // Use bytes32
     }
 
     // ==========================================
@@ -527,7 +564,7 @@ contract FarcasterCrowdfundTest is Test {
     // ==========================================
 
     function test_RevertWhen_DonateCancelled() public {
-        uint128 crowdfundId = _createDefaultCrowdfund(CONTENT_ID_13); // Use string ID
+        uint128 crowdfundId = _createDefaultCrowdfund(CONTENT_HASH_13); // Use bytes32
 
         // Cancel
         vm.prank(projectOwner);
@@ -535,17 +572,17 @@ contract FarcasterCrowdfundTest is Test {
 
         vm.prank(donor1);
         vm.expectRevert("Crowdfund has been cancelled");
-        crowdfund.donate(crowdfundId, DONATION_ID_13_1, DONATION_AMOUNT_1); // Use unique donation ID
+        crowdfund.donate(crowdfundId, DONATION_HASH_13_1, DONATION_AMOUNT_1); // Use bytes32
     }
 
     function test_RevertWhen_ClaimFundsCancelled() public {
-        uint128 crowdfundId = _createDefaultCrowdfund(CONTENT_ID_13); // Use string ID
+        uint128 crowdfundId = _createDefaultCrowdfund(CONTENT_HASH_13); // Use bytes32
 
          // Make donations to meet the goal
         vm.prank(donor1);
-        crowdfund.donate(crowdfundId, DONATION_ID_13_1, DONATION_AMOUNT_2); // Use unique donation ID
+        crowdfund.donate(crowdfundId, DONATION_HASH_13_1, DONATION_AMOUNT_2); // Use bytes32
         vm.prank(donor2);
-        crowdfund.donate(crowdfundId, DONATION_ID_13_2, DONATION_AMOUNT_3); // Use unique donation ID
+        crowdfund.donate(crowdfundId, DONATION_HASH_13_2, DONATION_AMOUNT_3); // Use bytes32
 
         // Cancel
         vm.prank(projectOwner);
@@ -560,11 +597,11 @@ contract FarcasterCrowdfundTest is Test {
     }
 
     function test_ClaimRefundWhenCancelled() public {
-        uint128 crowdfundId = _createDefaultCrowdfund(CONTENT_ID_14); // Use string ID
+        uint128 crowdfundId = _createDefaultCrowdfund(CONTENT_HASH_14); // Use bytes32
 
         // Make a donation
         vm.prank(donor1);
-        crowdfund.donate(crowdfundId, DONATION_ID_14, DONATION_AMOUNT_1); // Use unique donation ID
+        crowdfund.donate(crowdfundId, DONATION_HASH_14, DONATION_AMOUNT_1); // Use bytes32
 
         // Cancel before end time
         vm.prank(projectOwner);
@@ -585,10 +622,10 @@ contract FarcasterCrowdfundTest is Test {
     // ==========================================
 
     function test_RevertWhen_ClaimFundsTwice() public {
-        uint128 crowdfundId = _createDefaultCrowdfund(CONTENT_ID_15); // Use string ID
+        uint128 crowdfundId = _createDefaultCrowdfund(CONTENT_HASH_15); // Use bytes32
         // Meet goal
         vm.prank(donor1);
-        crowdfund.donate(crowdfundId, DONATION_ID_15_1, GOAL_AMOUNT); // Use unique donation ID
+        crowdfund.donate(crowdfundId, DONATION_HASH_15_1, GOAL_AMOUNT); // Use bytes32
         // Warp and claim first time
         vm.warp(block.timestamp + DEFAULT_MAX_DURATION + 1 days);
         vm.prank(projectOwner);
@@ -601,10 +638,10 @@ contract FarcasterCrowdfundTest is Test {
     }
 
     function test_RevertWhen_ClaimRefundTwice() public {
-        uint128 crowdfundId = _createDefaultCrowdfund(CONTENT_ID_15); // Use string ID
+        uint128 crowdfundId = _createDefaultCrowdfund(CONTENT_HASH_15); // Use bytes32
         // Donate less than goal
         vm.prank(donor1);
-        crowdfund.donate(crowdfundId, DONATION_ID_15_2, DONATION_AMOUNT_1); // Use unique donation ID
+        crowdfund.donate(crowdfundId, DONATION_HASH_15_2, DONATION_AMOUNT_1); // Use bytes32
         // Warp and claim refund first time
         vm.warp(block.timestamp + DEFAULT_MAX_DURATION + 1 days);
         vm.prank(donor1);
@@ -617,7 +654,7 @@ contract FarcasterCrowdfundTest is Test {
     }
 
     function test_RevertWhen_CancelTwice() public {
-        uint128 crowdfundId = _createDefaultCrowdfund(CONTENT_ID_15); // Use string ID
+        uint128 crowdfundId = _createDefaultCrowdfund(CONTENT_HASH_15); // Use bytes32
         // Cancel first time
         vm.prank(projectOwner);
         crowdfund.cancelCrowdfund(crowdfundId);
@@ -633,9 +670,9 @@ contract FarcasterCrowdfundTest is Test {
     // ==========================================
 
     function test_GetDonorTokenId() public {
-        uint128 crowdfundId = _createDefaultCrowdfund(CONTENT_ID_16); // Use string ID
+        uint128 crowdfundId = _createDefaultCrowdfund(CONTENT_HASH_16); // Use bytes32
         vm.prank(donor1);
-        crowdfund.donate(crowdfundId, DONATION_ID_16, DONATION_AMOUNT_1); // Use unique donation ID
+        crowdfund.donate(crowdfundId, DONATION_HASH_16, DONATION_AMOUNT_1); // Use bytes32
         uint128 expectedTokenId = 0; // First token minted
 
         assertEq(crowdfund.getDonorTokenId(crowdfundId, donor1), expectedTokenId);
@@ -643,9 +680,9 @@ contract FarcasterCrowdfundTest is Test {
     }
 
     function test_TokenURI() public {
-         uint128 crowdfundId = _createDefaultCrowdfund(CONTENT_ID_16); // Use string ID
+         uint128 crowdfundId = _createDefaultCrowdfund(CONTENT_HASH_16); // Use bytes32
          vm.prank(donor1);
-         crowdfund.donate(crowdfundId, DONATION_ID_16, DONATION_AMOUNT_1); // Use unique donation ID
+         crowdfund.donate(crowdfundId, DONATION_HASH_16, DONATION_AMOUNT_1); // Use bytes32
          uint128 tokenId = crowdfund.donorToTokenId(crowdfundId, donor1);
 
          string memory expectedURI = string(abi.encodePacked(BASE_URI, "0"));
@@ -663,18 +700,18 @@ contract FarcasterCrowdfundTest is Test {
 
     function test_RevertWhen_CreateDuplicateContentId() public {
         // Create first crowdfund with Content ID 1
-        _createDefaultCrowdfund(CONTENT_ID_1);
+        _createDefaultCrowdfund(CONTENT_HASH_1);
 
         // Attempt to create another with the same Content ID
         vm.prank(projectOwner);
-        vm.expectRevert('Content ID already used. Please use a unique ID or "" for no content ID.'); // Updated message
-        crowdfund.createCrowdfund(GOAL_AMOUNT, 5 days, CONTENT_ID_1);
+        vm.expectRevert('Content ID hash already used. Please use a unique hash or bytes32(0).');
+        crowdfund.createCrowdfund(GOAL_AMOUNT, 5 days, CONTENT_HASH_1);
     }
 
     function test_CreateWithContentIdEmptyString() public { // Renamed
         // Create with content ID ""
         vm.prank(projectOwner);
-        uint128 crowdfundId = crowdfund.createCrowdfund(GOAL_AMOUNT, 5 days, ""); // Use ""
+        uint128 crowdfundId = crowdfund.createCrowdfund(GOAL_AMOUNT, 5 days, bytes32(0)); // Use zero hash
         crowdfund.crowdfunds(crowdfundId); // Call getter to ensure it exists
         // No revert expected, basic check that it exists
         assertTrue(crowdfundId == 0); // First crowdfundId should be 0
@@ -683,12 +720,12 @@ contract FarcasterCrowdfundTest is Test {
     function test_CreateMultipleWithContentIdEmptyString() public { // Renamed
         // Create first with content ID ""
         vm.prank(projectOwner);
-        uint128 crowdfundId1 = crowdfund.createCrowdfund(GOAL_AMOUNT, 5 days, ""); // Use ""
+        uint128 crowdfundId1 = crowdfund.createCrowdfund(GOAL_AMOUNT, 5 days, bytes32(0)); // Use zero hash
         assertTrue(crowdfundId1 == 0);
 
         // Create second with content ID ""
         vm.prank(projectOwner);
-        uint128 crowdfundId2 = crowdfund.createCrowdfund(GOAL_AMOUNT, 5 days, ""); // Use ""
+        uint128 crowdfundId2 = crowdfund.createCrowdfund(GOAL_AMOUNT, 5 days, bytes32(0)); // Use zero hash
         assertTrue(crowdfundId2 == 1);
 
         // No reverts expected
@@ -697,60 +734,60 @@ contract FarcasterCrowdfundTest is Test {
 
     function test_RevertWhen_DonateDuplicateDonationId() public {
         // Setup
-        uint128 crowdfundId = _createDefaultCrowdfund(CONTENT_ID_1);
+        uint128 crowdfundId = _createDefaultCrowdfund(CONTENT_HASH_1);
         
         // First donation with Donation ID 1
         vm.startPrank(donor1);
-        crowdfund.donate(crowdfundId, DONATION_ID_1, DONATION_AMOUNT_1);
+        crowdfund.donate(crowdfundId, DONATION_HASH_1, DONATION_AMOUNT_1);
         vm.stopPrank();
 
         // Attempt second donation with the same Donation ID
         vm.startPrank(donor2);
-        vm.expectRevert('Donation ID already used. Please use a unique ID or "" for no donation ID.'); // Updated message
-        crowdfund.donate(crowdfundId, DONATION_ID_1, DONATION_AMOUNT_3);
+        vm.expectRevert('Donation ID hash already used. Please use a unique hash or bytes32(0).');
+        crowdfund.donate(crowdfundId, DONATION_HASH_1, DONATION_AMOUNT_3);
         vm.stopPrank();
     }
 
     function test_RevertWhen_DonateSameDonationIdDifferentCrowdfunds() public { // Renamed and logic changed
         // Setup two crowdfunds
-        uint128 crowdfundId1 = _createDefaultCrowdfund(CONTENT_ID_1);
-        uint128 crowdfundId2 = _createDefaultCrowdfund(CONTENT_ID_2);
+        uint128 crowdfundId1 = _createDefaultCrowdfund(CONTENT_HASH_1);
+        uint128 crowdfundId2 = _createDefaultCrowdfund(CONTENT_HASH_2);
         
         // Donate with Donation ID "donation-x" to first crowdfund
-        string memory sharedDonationId = "shared-donation-id";
+        bytes32 sharedDonationId = keccak256(abi.encodePacked("shared-donation-id"));
         vm.startPrank(donor1);
         crowdfund.donate(crowdfundId1, sharedDonationId, DONATION_AMOUNT_1);
         vm.stopPrank();
 
         // Attempt to donate with the same Donation ID to second crowdfund (should fail)
         vm.startPrank(donor2);
-        vm.expectRevert('Donation ID already used. Please use a unique ID or "" for no donation ID.'); // Updated message
+        vm.expectRevert('Donation ID hash already used. Please use a unique hash or bytes32(0).');
         crowdfund.donate(crowdfundId2, sharedDonationId, DONATION_AMOUNT_3);
         vm.stopPrank();
     }
 
     function test_DonateWithDonationIdEmptyString() public { // Renamed
-        uint128 crowdfundId = _createDefaultCrowdfund(CONTENT_ID_1);
+        uint128 crowdfundId = _createDefaultCrowdfund(CONTENT_HASH_1);
 
         // Donate with donation ID ""
         vm.prank(donor1);
-        crowdfund.donate(crowdfundId, "", DONATION_AMOUNT_1); // Use ""
+        crowdfund.donate(crowdfundId, bytes32(0), DONATION_AMOUNT_1); // Use zero hash
 
         // Assert donation recorded
         assertEq(crowdfund.donations(crowdfundId, donor1), DONATION_AMOUNT_1);
     }
 
     function test_DonateMultipleWithDonationIdEmptyString() public { // Renamed
-        uint128 crowdfundId = _createDefaultCrowdfund(CONTENT_ID_1);
+        uint128 crowdfundId = _createDefaultCrowdfund(CONTENT_HASH_1);
 
         // First donation with donation ID ""
         vm.prank(donor1);
-        crowdfund.donate(crowdfundId, "", DONATION_AMOUNT_1); // Use ""
+        crowdfund.donate(crowdfundId, bytes32(0), DONATION_AMOUNT_1); // Use zero hash
         vm.stopPrank();
 
         // Second donation with donation ID ""
         vm.prank(donor2);
-        crowdfund.donate(crowdfundId, "", DONATION_AMOUNT_3); // Use ""
+        crowdfund.donate(crowdfundId, bytes32(0), DONATION_AMOUNT_3); // Use zero hash
         vm.stopPrank();
 
         // Assert both donations recorded
@@ -766,25 +803,25 @@ contract FarcasterCrowdfundTest is Test {
 
     function testEmit_CreateCrowdfund() public {
         vm.prank(projectOwner);
-        string memory contentId = CONTENT_ID_1; // Use string ID
+        bytes32 contentHash = CONTENT_HASH_1;
         uint64 expectedEndTime = uint64(block.timestamp + 5 days);
 
         vm.expectEmit(true, true, true, false);
         emit FarcasterCrowdfund.CrowdfundCreated(
             0, // Expected next crowdfundId
-            contentId,
+            contentHash,
             projectOwner,
             GOAL_AMOUNT,
             expectedEndTime
         );
 
-        crowdfund.createCrowdfund(GOAL_AMOUNT, 5 days, contentId);
+        crowdfund.createCrowdfund(GOAL_AMOUNT, 5 days, contentHash);
     }
 
     function testEmit_DonateAndMintNFT() public {
-        uint128 crowdfundId = _createDefaultCrowdfund(CONTENT_ID_1);
+        uint128 crowdfundId = _createDefaultCrowdfund(CONTENT_HASH_1);
         uint128 tokenId = 0; // Expect first token ID
-        string memory donationId = DONATION_ID_1; // Use string ID
+        bytes32 donationHash = DONATION_HASH_1;
 
         vm.prank(donor1);
 
@@ -793,7 +830,7 @@ contract FarcasterCrowdfundTest is Test {
         vm.expectEmit(true, true, true, true); 
         emit FarcasterCrowdfund.NFTMinted(
             crowdfundId,
-            CONTENT_ID_1, // Expect string ID
+            CONTENT_HASH_1, // Expect bytes32
             donor1,
             tokenId
         );
@@ -803,24 +840,24 @@ contract FarcasterCrowdfundTest is Test {
         vm.expectEmit(true, true, true, true); 
         emit FarcasterCrowdfund.DonationReceived(
             crowdfundId,
-            CONTENT_ID_1, // Expect string ID
-            donationId, // Expect string ID
+            CONTENT_HASH_1, // Expect bytes32
+            donationHash, // Expect bytes32
             donor1,
             DONATION_AMOUNT_1
         );
 
-        crowdfund.donate(crowdfundId, donationId, DONATION_AMOUNT_1); // Use string ID
+        crowdfund.donate(crowdfundId, donationHash, DONATION_AMOUNT_1); // Use bytes32
     }
 
     // ==========================================
     // Helper function to quickly create a standard crowdfund for tests
     // ==========================================
-    function _createDefaultCrowdfund(string memory contentId) internal returns (uint128 crowdfundId) { // Accept string
+    function _createDefaultCrowdfund(bytes32 contentHash) internal returns (uint128 crowdfundId) { // Accept bytes32
         vm.prank(projectOwner);
         return crowdfund.createCrowdfund(
             GOAL_AMOUNT, 
             DEFAULT_MAX_DURATION,
-            contentId // Pass string ID
+            contentHash // Pass bytes32
         );
     }
 }
