@@ -14,7 +14,7 @@ contract DeployBaseSepolia is Script {
     string public constant BASE_URI = "https://test.crowdfund.seedclub.com/nfts/";
     
     // Maximum crowdfund duration (7 days)
-    uint256 public constant MAX_DURATION = 7 days;
+    uint64 public constant MAX_DURATION = 7 days;
 
     function run() public {
         // Retrieve deployer private key from env variable
