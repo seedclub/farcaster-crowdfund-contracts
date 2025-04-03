@@ -19,22 +19,42 @@ contract FarcasterCrowdfundTest is Test {
     uint128 public constant INITIAL_BALANCE = 1000 * 10**6; // 1000 USDC (6 decimals)
     string public constant BASE_URI = "https://crowdfund.seedclub.com/nfts/";
     uint64 public constant DEFAULT_MAX_DURATION = 7 days;
-    uint128 public constant CONTENT_ID_1 = 1;
-    uint128 public constant DONATION_ID_1 = 101;
-    uint128 public constant CONTENT_ID_2 = 2;
-    uint128 public constant DONATION_ID_2 = 102;
-    uint128 public constant CONTENT_ID_3 = 3;
-    uint128 public constant DONATION_ID_3 = 103;
-    uint128 public constant CONTENT_ID_4 = 4;
-    uint128 public constant DONATION_ID_4 = 104;
-    uint128 public constant CONTENT_ID_5 = 5;
-    uint128 public constant DONATION_ID_5 = 105;
-    uint128 public constant CONTENT_ID_6 = 6;
-    uint128 public constant DONATION_ID_6 = 106;
-    uint128 public constant CONTENT_ID_7 = 7;
-    uint128 public constant DONATION_ID_7 = 107;
-    uint128 public constant CONTENT_ID_8 = 8;
-    uint128 public constant DONATION_ID_8 = 108;
+    string public constant CONTENT_ID_1 = "content-1";
+    string public constant DONATION_ID_1 = "donation-1-1"; // Made unique per donation for clarity
+    string public constant CONTENT_ID_2 = "content-2";
+    string public constant DONATION_ID_2 = "donation-2-1";
+    string public constant CONTENT_ID_3 = "content-3";
+    string public constant DONATION_ID_3_1 = "donation-3-1"; // For first donation in test_MultipleDonations
+    string public constant DONATION_ID_3_2 = "donation-3-2"; // For second donation in test_MultipleDonations
+    string public constant CONTENT_ID_4 = "content-4";
+    string public constant DONATION_ID_4_1 = "donation-4-1";
+    string public constant DONATION_ID_4_2 = "donation-4-2";
+    string public constant CONTENT_ID_5 = "content-5";
+    string public constant DONATION_ID_5 = "donation-5-1";
+    string public constant CONTENT_ID_6 = "content-6";
+    string public constant DONATION_ID_6 = "donation-6-1";
+    string public constant CONTENT_ID_7 = "content-7";
+    string public constant DONATION_ID_7 = "donation-7-1";
+    string public constant CONTENT_ID_8 = "content-8";
+    string public constant DONATION_ID_8 = "donation-8-1";
+    string public constant CONTENT_ID_9 = "content-9"; // For GetDonors test
+    string public constant DONATION_ID_9_1 = "donation-9-1";
+    string public constant DONATION_ID_9_2 = "donation-9-2";
+    string public constant CONTENT_ID_10 = "content-10"; // For Admin tests
+    string public constant DONATION_ID_10 = "donation-10-1";
+    string public constant CONTENT_ID_11 = "content-11"; // For Paused tests
+    string public constant CONTENT_ID_12 = "content-12"; // For Input validation tests
+    string public constant CONTENT_ID_13 = "content-13"; // For Cancelled tests
+    string public constant DONATION_ID_13_1 = "donation-13-1";
+    string public constant DONATION_ID_13_2 = "donation-13-2";
+    string public constant CONTENT_ID_14 = "content-14"; // For ClaimRefundWhenCancelled test
+    string public constant DONATION_ID_14 = "donation-14-1";
+    string public constant CONTENT_ID_15 = "content-15"; // For Double action tests
+    string public constant DONATION_ID_15_1 = "donation-15-1";
+    string public constant DONATION_ID_15_2 = "donation-15-2";
+    string public constant CONTENT_ID_16 = "content-16"; // For View function tests
+    string public constant DONATION_ID_16 = "donation-16-1";
+
     uint128 public constant GOAL_AMOUNT = 100 * 10**6; // 100 USDC
     uint128 public constant DONATION_AMOUNT_1 = 50 * 10**6; // 50 USDC
     uint128 public constant DONATION_AMOUNT_2 = 60 * 10**6; // 60 USDC
@@ -72,7 +92,7 @@ contract FarcasterCrowdfundTest is Test {
     function test_CreateCrowdfund() public {
         // Setup
         vm.prank(projectOwner);
-        uint128 contentId = CONTENT_ID_1;
+        string memory contentId = CONTENT_ID_1; // Changed to string
 
         // Create a crowdfund
         uint128 crowdfundId = crowdfund.createCrowdfund(
@@ -86,7 +106,7 @@ contract FarcasterCrowdfundTest is Test {
             uint128 goal,
             uint128 totalRaised,
             uint64 endTimestamp,
-            uint128 cfContentId,
+            string memory cfContentId, // Changed to string memory
             address cfOwner,
             bool fundsClaimed,
             bool cancelled
@@ -104,8 +124,8 @@ contract FarcasterCrowdfundTest is Test {
     function test_DonateAndMintNFT() public {
         // Setup - create a crowdfund
         vm.prank(projectOwner);
-        uint128 contentId = CONTENT_ID_2;
-        uint128 donationId = DONATION_ID_2;
+        string memory contentId = CONTENT_ID_2; // Changed to string
+        string memory donationId = DONATION_ID_2; // Changed to string
         uint128 crowdfundId = crowdfund.createCrowdfund(
             GOAL_AMOUNT,
             5 days,
@@ -144,7 +164,7 @@ contract FarcasterCrowdfundTest is Test {
     function test_MultipleDonations() public {
         // Setup - create a crowdfund
         vm.prank(projectOwner);
-        uint128 contentId = CONTENT_ID_3;
+        string memory contentId = CONTENT_ID_3; // Changed to string
         uint128 crowdfundId = crowdfund.createCrowdfund(
             GOAL_AMOUNT,
             5 days,
@@ -154,12 +174,12 @@ contract FarcasterCrowdfundTest is Test {
         // First donation
         vm.startPrank(donor1);
         usdc.approve(address(crowdfund), DONATION_AMOUNT_1);
-        crowdfund.donate(crowdfundId, DONATION_ID_1, DONATION_AMOUNT_1);
+        crowdfund.donate(crowdfundId, DONATION_ID_3_1, DONATION_AMOUNT_1); // Use unique donation ID
         uint128 firstTokenId = crowdfund.donorToTokenId(crowdfundId, donor1);
         
         // Second donation from same donor
         usdc.approve(address(crowdfund), DONATION_AMOUNT_3);
-        crowdfund.donate(crowdfundId, DONATION_ID_3, DONATION_AMOUNT_3);
+        crowdfund.donate(crowdfundId, DONATION_ID_3_2, DONATION_AMOUNT_3); // Use unique donation ID
         uint128 secondTokenId = crowdfund.donorToTokenId(crowdfundId, donor1);
         vm.stopPrank();
         
@@ -173,7 +193,7 @@ contract FarcasterCrowdfundTest is Test {
     function test_ClaimFunds() public {
         // Setup - create a crowdfund
         vm.prank(projectOwner);
-        uint128 contentId = CONTENT_ID_4;
+        string memory contentId = CONTENT_ID_4; // Changed to string
         uint128 crowdfundId = crowdfund.createCrowdfund(
             GOAL_AMOUNT,
             5 days,
@@ -183,12 +203,12 @@ contract FarcasterCrowdfundTest is Test {
         // Make donations to meet the goal
         vm.startPrank(donor1);
         usdc.approve(address(crowdfund), DONATION_AMOUNT_2);
-        crowdfund.donate(crowdfundId, DONATION_ID_1, DONATION_AMOUNT_2);
+        crowdfund.donate(crowdfundId, DONATION_ID_4_1, DONATION_AMOUNT_2); // Use unique donation ID
         vm.stopPrank();
         
         vm.startPrank(donor2);
         usdc.approve(address(crowdfund), DONATION_AMOUNT_3);
-        crowdfund.donate(crowdfundId, DONATION_ID_2, DONATION_AMOUNT_3);
+        crowdfund.donate(crowdfundId, DONATION_ID_4_2, DONATION_AMOUNT_3); // Use unique donation ID
         vm.stopPrank();
         
         // Warp to after the end time
@@ -215,7 +235,7 @@ contract FarcasterCrowdfundTest is Test {
     function test_ClaimRefund() public {
         // Setup - create a crowdfund
         vm.prank(projectOwner);
-        uint128 contentId = CONTENT_ID_5;
+        string memory contentId = CONTENT_ID_5; // Changed to string
         uint128 crowdfundId = crowdfund.createCrowdfund(
             GOAL_AMOUNT,
             5 days,
@@ -225,7 +245,7 @@ contract FarcasterCrowdfundTest is Test {
         // Make a donation
         vm.startPrank(donor1);
         usdc.approve(address(crowdfund), DONATION_AMOUNT_1);
-        crowdfund.donate(crowdfundId, DONATION_ID_1, DONATION_AMOUNT_1);
+        crowdfund.donate(crowdfundId, DONATION_ID_5, DONATION_AMOUNT_1); // Use unique donation ID
         vm.stopPrank();
         
         // Warp to after the end time
@@ -252,7 +272,7 @@ contract FarcasterCrowdfundTest is Test {
     function test_CancelCrowdfund() public {
         // Setup - create a crowdfund
         vm.prank(projectOwner);
-        uint128 contentId = CONTENT_ID_6;
+        string memory contentId = CONTENT_ID_6; // Changed to string
         uint128 crowdfundId = crowdfund.createCrowdfund(
             GOAL_AMOUNT,
             5 days,
@@ -262,7 +282,7 @@ contract FarcasterCrowdfundTest is Test {
         // Make a donation
         vm.startPrank(donor1);
         usdc.approve(address(crowdfund), DONATION_AMOUNT_1);
-        crowdfund.donate(crowdfundId, DONATION_ID_1, DONATION_AMOUNT_1);
+        crowdfund.donate(crowdfundId, DONATION_ID_6, DONATION_AMOUNT_1); // Use unique donation ID
         vm.stopPrank();
         
         // Cancel the crowdfund
@@ -281,7 +301,7 @@ contract FarcasterCrowdfundTest is Test {
     function test_RevertWhen_DonateAfterEnd() public {
         // Setup
         vm.prank(projectOwner);
-        uint128 contentId = CONTENT_ID_7;
+        string memory contentId = CONTENT_ID_7; // Changed to string
         uint128 crowdfundId = crowdfund.createCrowdfund(GOAL_AMOUNT, 1 days, contentId);
         vm.warp(block.timestamp + 2 days); // Warp past end time
 
@@ -289,18 +309,18 @@ contract FarcasterCrowdfundTest is Test {
         vm.startPrank(donor1);
         usdc.approve(address(crowdfund), 10 * 10**6);
         vm.expectRevert("Crowdfund has ended");
-        crowdfund.donate(crowdfundId, DONATION_ID_7, 10 * 10**6);
+        crowdfund.donate(crowdfundId, DONATION_ID_7, 10 * 10**6); // Use unique donation ID
         vm.stopPrank();
     }
 
     function test_RevertWhen_ClaimFundsGoalNotMet() public {
         // Setup
         vm.prank(projectOwner);
-        uint128 contentId = CONTENT_ID_8;
+        string memory contentId = CONTENT_ID_8; // Changed to string
         uint128 crowdfundId = crowdfund.createCrowdfund(GOAL_AMOUNT, 5 days, contentId);
         vm.startPrank(donor1);
         usdc.approve(address(crowdfund), DONATION_AMOUNT_1);
-        crowdfund.donate(crowdfundId, DONATION_ID_8, DONATION_AMOUNT_1);
+        crowdfund.donate(crowdfundId, DONATION_ID_8, DONATION_AMOUNT_1); // Use unique donation ID
         vm.stopPrank();
         vm.warp(block.timestamp + 6 days); // Warp past end time
 
@@ -313,12 +333,12 @@ contract FarcasterCrowdfundTest is Test {
     function test_RevertWhen_ClaimRefundGoalMet() public {
         // Setup - create a crowdfund and meet the goal
         vm.prank(projectOwner);
-        uint128 contentId = CONTENT_ID_1;
+        string memory contentId = CONTENT_ID_1; // Changed to string
         uint128 crowdfundId = crowdfund.createCrowdfund(GOAL_AMOUNT, 5 days, contentId);
         
         vm.startPrank(donor1);
         usdc.approve(address(crowdfund), GOAL_AMOUNT);
-        crowdfund.donate(crowdfundId, DONATION_ID_1, GOAL_AMOUNT);
+        crowdfund.donate(crowdfundId, DONATION_ID_1, GOAL_AMOUNT); // Use unique donation ID
         vm.stopPrank();
         
         vm.warp(block.timestamp + 6 days); // Warp past end time
@@ -332,11 +352,11 @@ contract FarcasterCrowdfundTest is Test {
     function test_RevertWhen_CancelAfterClaim() public {
         // Setup - create, fund, and claim
         vm.prank(projectOwner);
-        uint128 contentId = CONTENT_ID_2;
+        string memory contentId = CONTENT_ID_2; // Changed to string
         uint128 crowdfundId = crowdfund.createCrowdfund(GOAL_AMOUNT, 5 days, contentId);
         vm.startPrank(donor1);
         usdc.approve(address(crowdfund), GOAL_AMOUNT);
-        crowdfund.donate(crowdfundId, DONATION_ID_2, GOAL_AMOUNT);
+        crowdfund.donate(crowdfundId, DONATION_ID_2, GOAL_AMOUNT); // Use unique donation ID
         vm.stopPrank();
         vm.warp(block.timestamp + 6 days);
         vm.prank(projectOwner);
@@ -347,32 +367,6 @@ contract FarcasterCrowdfundTest is Test {
         // Prank as projectOwner to test the correct revert condition
         vm.prank(projectOwner);
         crowdfund.cancelCrowdfund(crowdfundId);
-    }
-
-    function test_GetDonors() public {
-         // Setup
-        vm.prank(projectOwner);
-        uint128 contentId = CONTENT_ID_3;
-        uint128 crowdfundId = crowdfund.createCrowdfund(GOAL_AMOUNT, 5 days, contentId);
-
-        // Donations
-        vm.startPrank(donor1);
-        usdc.approve(address(crowdfund), 10 * 10**6);
-        crowdfund.donate(crowdfundId, DONATION_ID_1, 10 * 10**6);
-        vm.stopPrank();
-
-        vm.startPrank(donor2);
-        usdc.approve(address(crowdfund), 20 * 10**6);
-        crowdfund.donate(crowdfundId, DONATION_ID_2, 20 * 10**6);
-        vm.stopPrank();
-
-        // Get donors
-        address[] memory donors = crowdfund.getDonors(crowdfundId);
-
-        // Assert
-        assertEq(donors.length, 2);
-        assertEq(donors[0], donor1);
-        assertEq(donors[1], donor2);
     }
 
     // ==========================================
@@ -391,9 +385,9 @@ contract FarcasterCrowdfundTest is Test {
         crowdfund.setBaseURI(newBaseURI);
 
         // Verify with tokenURI (requires minting a token first)
-        uint128 crowdfundId = _createDefaultCrowdfund(CONTENT_ID_1);
+        uint128 crowdfundId = _createDefaultCrowdfund(CONTENT_ID_10); // Use string ID
         vm.prank(donor1);
-        crowdfund.donate(crowdfundId, DONATION_ID_1, DONATION_AMOUNT_1);
+        crowdfund.donate(crowdfundId, DONATION_ID_10, DONATION_AMOUNT_1); // Use unique donation ID
         uint128 tokenId = crowdfund.donorToTokenId(crowdfundId, donor1);
 
         assertEq(crowdfund.tokenURI(tokenId), string(abi.encodePacked(newBaseURI, "0")));
@@ -504,28 +498,28 @@ contract FarcasterCrowdfundTest is Test {
         crowdfund.createCrowdfund(
             GOAL_AMOUNT, 
             DEFAULT_MAX_DURATION + 1 days, // Exceed max
-            CONTENT_ID_1
+            CONTENT_ID_12 // Use string ID
         );
     }
 
     function test_RevertWhen_CreateGoalZero() public {
         vm.prank(projectOwner);
         vm.expectRevert("Goal must be greater than 0");
-        crowdfund.createCrowdfund(0, 5 days, CONTENT_ID_1);
+        crowdfund.createCrowdfund(0, 5 days, CONTENT_ID_12); // Use string ID
     }
 
     function test_RevertWhen_CreateDurationZero() public {
         vm.prank(projectOwner);
         vm.expectRevert("Duration must be greater than 0");
-        crowdfund.createCrowdfund(GOAL_AMOUNT, 0, CONTENT_ID_1);
+        crowdfund.createCrowdfund(GOAL_AMOUNT, 0, CONTENT_ID_12); // Use string ID
     }
 
     function test_RevertWhen_DonateAmountZero() public {
-        uint128 crowdfundId = _createDefaultCrowdfund(CONTENT_ID_1);
+        uint128 crowdfundId = _createDefaultCrowdfund(CONTENT_ID_12); // Use string ID
 
         vm.prank(donor1);
         vm.expectRevert("Amount must be greater than 0");
-        crowdfund.donate(crowdfundId, DONATION_ID_1, 0);
+        crowdfund.donate(crowdfundId, DONATION_ID_1, 0); // Use unique donation ID
     }
 
     // ==========================================
@@ -533,7 +527,7 @@ contract FarcasterCrowdfundTest is Test {
     // ==========================================
 
     function test_RevertWhen_DonateCancelled() public {
-        uint128 crowdfundId = _createDefaultCrowdfund(CONTENT_ID_1);
+        uint128 crowdfundId = _createDefaultCrowdfund(CONTENT_ID_13); // Use string ID
 
         // Cancel
         vm.prank(projectOwner);
@@ -541,17 +535,17 @@ contract FarcasterCrowdfundTest is Test {
 
         vm.prank(donor1);
         vm.expectRevert("Crowdfund has been cancelled");
-        crowdfund.donate(crowdfundId, DONATION_ID_1, DONATION_AMOUNT_1);
+        crowdfund.donate(crowdfundId, DONATION_ID_13_1, DONATION_AMOUNT_1); // Use unique donation ID
     }
 
     function test_RevertWhen_ClaimFundsCancelled() public {
-        uint128 crowdfundId = _createDefaultCrowdfund(CONTENT_ID_1);
+        uint128 crowdfundId = _createDefaultCrowdfund(CONTENT_ID_13); // Use string ID
 
          // Make donations to meet the goal
         vm.prank(donor1);
-        crowdfund.donate(crowdfundId, DONATION_ID_1, DONATION_AMOUNT_2);
+        crowdfund.donate(crowdfundId, DONATION_ID_13_1, DONATION_AMOUNT_2); // Use unique donation ID
         vm.prank(donor2);
-        crowdfund.donate(crowdfundId, DONATION_ID_2, DONATION_AMOUNT_3);
+        crowdfund.donate(crowdfundId, DONATION_ID_13_2, DONATION_AMOUNT_3); // Use unique donation ID
 
         // Cancel
         vm.prank(projectOwner);
@@ -566,11 +560,11 @@ contract FarcasterCrowdfundTest is Test {
     }
 
     function test_ClaimRefundWhenCancelled() public {
-        uint128 crowdfundId = _createDefaultCrowdfund(CONTENT_ID_1);
+        uint128 crowdfundId = _createDefaultCrowdfund(CONTENT_ID_14); // Use string ID
 
         // Make a donation
         vm.prank(donor1);
-        crowdfund.donate(crowdfundId, DONATION_ID_1, DONATION_AMOUNT_1);
+        crowdfund.donate(crowdfundId, DONATION_ID_14, DONATION_AMOUNT_1); // Use unique donation ID
 
         // Cancel before end time
         vm.prank(projectOwner);
@@ -591,10 +585,10 @@ contract FarcasterCrowdfundTest is Test {
     // ==========================================
 
     function test_RevertWhen_ClaimFundsTwice() public {
-        uint128 crowdfundId = _createDefaultCrowdfund(CONTENT_ID_1);
+        uint128 crowdfundId = _createDefaultCrowdfund(CONTENT_ID_15); // Use string ID
         // Meet goal
         vm.prank(donor1);
-        crowdfund.donate(crowdfundId, DONATION_ID_1, GOAL_AMOUNT);
+        crowdfund.donate(crowdfundId, DONATION_ID_15_1, GOAL_AMOUNT); // Use unique donation ID
         // Warp and claim first time
         vm.warp(block.timestamp + DEFAULT_MAX_DURATION + 1 days);
         vm.prank(projectOwner);
@@ -607,10 +601,10 @@ contract FarcasterCrowdfundTest is Test {
     }
 
     function test_RevertWhen_ClaimRefundTwice() public {
-        uint128 crowdfundId = _createDefaultCrowdfund(CONTENT_ID_1);
+        uint128 crowdfundId = _createDefaultCrowdfund(CONTENT_ID_15); // Use string ID
         // Donate less than goal
         vm.prank(donor1);
-        crowdfund.donate(crowdfundId, DONATION_ID_1, DONATION_AMOUNT_1);
+        crowdfund.donate(crowdfundId, DONATION_ID_15_2, DONATION_AMOUNT_1); // Use unique donation ID
         // Warp and claim refund first time
         vm.warp(block.timestamp + DEFAULT_MAX_DURATION + 1 days);
         vm.prank(donor1);
@@ -623,7 +617,7 @@ contract FarcasterCrowdfundTest is Test {
     }
 
     function test_RevertWhen_CancelTwice() public {
-        uint128 crowdfundId = _createDefaultCrowdfund(CONTENT_ID_1);
+        uint128 crowdfundId = _createDefaultCrowdfund(CONTENT_ID_15); // Use string ID
         // Cancel first time
         vm.prank(projectOwner);
         crowdfund.cancelCrowdfund(crowdfundId);
@@ -639,9 +633,9 @@ contract FarcasterCrowdfundTest is Test {
     // ==========================================
 
     function test_GetDonorTokenId() public {
-        uint128 crowdfundId = _createDefaultCrowdfund(CONTENT_ID_1);
+        uint128 crowdfundId = _createDefaultCrowdfund(CONTENT_ID_16); // Use string ID
         vm.prank(donor1);
-        crowdfund.donate(crowdfundId, DONATION_ID_1, DONATION_AMOUNT_1);
+        crowdfund.donate(crowdfundId, DONATION_ID_16, DONATION_AMOUNT_1); // Use unique donation ID
         uint128 expectedTokenId = 0; // First token minted
 
         assertEq(crowdfund.getDonorTokenId(crowdfundId, donor1), expectedTokenId);
@@ -649,9 +643,9 @@ contract FarcasterCrowdfundTest is Test {
     }
 
     function test_TokenURI() public {
-         uint128 crowdfundId = _createDefaultCrowdfund(CONTENT_ID_1);
+         uint128 crowdfundId = _createDefaultCrowdfund(CONTENT_ID_16); // Use string ID
          vm.prank(donor1);
-         crowdfund.donate(crowdfundId, DONATION_ID_1, DONATION_AMOUNT_1);
+         crowdfund.donate(crowdfundId, DONATION_ID_16, DONATION_AMOUNT_1); // Use unique donation ID
          uint128 tokenId = crowdfund.donorToTokenId(crowdfundId, donor1);
 
          string memory expectedURI = string(abi.encodePacked(BASE_URI, "0"));
@@ -673,28 +667,28 @@ contract FarcasterCrowdfundTest is Test {
 
         // Attempt to create another with the same Content ID
         vm.prank(projectOwner);
-        vm.expectRevert("Content ID already used. Please use a unique ID or 0 for no content ID.");
+        vm.expectRevert('Content ID already used. Please use a unique ID or "" for no content ID.'); // Updated message
         crowdfund.createCrowdfund(GOAL_AMOUNT, 5 days, CONTENT_ID_1);
     }
 
-    function test_CreateWithContentIdZero() public {
-        // Create with content ID 0
+    function test_CreateWithContentIdEmptyString() public { // Renamed
+        // Create with content ID ""
         vm.prank(projectOwner);
-        uint128 crowdfundId = crowdfund.createCrowdfund(GOAL_AMOUNT, 5 days, 0);
+        uint128 crowdfundId = crowdfund.createCrowdfund(GOAL_AMOUNT, 5 days, ""); // Use ""
         crowdfund.crowdfunds(crowdfundId); // Call getter to ensure it exists
         // No revert expected, basic check that it exists
         assertTrue(crowdfundId == 0); // First crowdfundId should be 0
     }
 
-    function test_CreateMultipleWithContentIdZero() public {
-        // Create first with content ID 0
+    function test_CreateMultipleWithContentIdEmptyString() public { // Renamed
+        // Create first with content ID ""
         vm.prank(projectOwner);
-        uint128 crowdfundId1 = crowdfund.createCrowdfund(GOAL_AMOUNT, 5 days, 0);
+        uint128 crowdfundId1 = crowdfund.createCrowdfund(GOAL_AMOUNT, 5 days, ""); // Use ""
         assertTrue(crowdfundId1 == 0);
 
-        // Create second with content ID 0
+        // Create second with content ID ""
         vm.prank(projectOwner);
-        uint128 crowdfundId2 = crowdfund.createCrowdfund(GOAL_AMOUNT, 5 days, 0);
+        uint128 crowdfundId2 = crowdfund.createCrowdfund(GOAL_AMOUNT, 5 days, ""); // Use ""
         assertTrue(crowdfundId2 == 1);
 
         // No reverts expected
@@ -712,52 +706,51 @@ contract FarcasterCrowdfundTest is Test {
 
         // Attempt second donation with the same Donation ID
         vm.startPrank(donor2);
-        vm.expectRevert("Donation ID already used. Please use a unique ID or 0 for no donation ID.");
+        vm.expectRevert('Donation ID already used. Please use a unique ID or "" for no donation ID.'); // Updated message
         crowdfund.donate(crowdfundId, DONATION_ID_1, DONATION_AMOUNT_3);
         vm.stopPrank();
     }
 
-    function test_DonateSameDonationIdDifferentCrowdfunds() public {
+    function test_RevertWhen_DonateSameDonationIdDifferentCrowdfunds() public { // Renamed and logic changed
         // Setup two crowdfunds
         uint128 crowdfundId1 = _createDefaultCrowdfund(CONTENT_ID_1);
         uint128 crowdfundId2 = _createDefaultCrowdfund(CONTENT_ID_2);
         
-        // Donate with Donation ID 1 to first crowdfund
+        // Donate with Donation ID "donation-x" to first crowdfund
+        string memory sharedDonationId = "shared-donation-id";
         vm.startPrank(donor1);
-        crowdfund.donate(crowdfundId1, DONATION_ID_1, DONATION_AMOUNT_1);
+        crowdfund.donate(crowdfundId1, sharedDonationId, DONATION_AMOUNT_1);
         vm.stopPrank();
 
-        // Donate with the same Donation ID 1 to second crowdfund (should succeed)
+        // Attempt to donate with the same Donation ID to second crowdfund (should fail)
         vm.startPrank(donor2);
-        crowdfund.donate(crowdfundId2, DONATION_ID_1, DONATION_AMOUNT_3);
+        vm.expectRevert('Donation ID already used. Please use a unique ID or "" for no donation ID.'); // Updated message
+        crowdfund.donate(crowdfundId2, sharedDonationId, DONATION_AMOUNT_3);
         vm.stopPrank();
-
-        // Assert donation recorded on second crowdfund
-        assertEq(crowdfund.donations(crowdfundId2, donor2), DONATION_AMOUNT_3);
     }
 
-    function test_DonateWithDonationIdZero() public {
+    function test_DonateWithDonationIdEmptyString() public { // Renamed
         uint128 crowdfundId = _createDefaultCrowdfund(CONTENT_ID_1);
 
-        // Donate with donation ID 0
+        // Donate with donation ID ""
         vm.prank(donor1);
-        crowdfund.donate(crowdfundId, 0, DONATION_AMOUNT_1);
+        crowdfund.donate(crowdfundId, "", DONATION_AMOUNT_1); // Use ""
 
         // Assert donation recorded
         assertEq(crowdfund.donations(crowdfundId, donor1), DONATION_AMOUNT_1);
     }
 
-    function test_DonateMultipleWithDonationIdZero() public {
+    function test_DonateMultipleWithDonationIdEmptyString() public { // Renamed
         uint128 crowdfundId = _createDefaultCrowdfund(CONTENT_ID_1);
 
-        // First donation with donation ID 0
+        // First donation with donation ID ""
         vm.prank(donor1);
-        crowdfund.donate(crowdfundId, 0, DONATION_AMOUNT_1);
+        crowdfund.donate(crowdfundId, "", DONATION_AMOUNT_1); // Use ""
         vm.stopPrank();
 
-        // Second donation with donation ID 0
+        // Second donation with donation ID ""
         vm.prank(donor2);
-        crowdfund.donate(crowdfundId, 0, DONATION_AMOUNT_3);
+        crowdfund.donate(crowdfundId, "", DONATION_AMOUNT_3); // Use ""
         vm.stopPrank();
 
         // Assert both donations recorded
@@ -773,7 +766,7 @@ contract FarcasterCrowdfundTest is Test {
 
     function testEmit_CreateCrowdfund() public {
         vm.prank(projectOwner);
-        uint128 contentId = CONTENT_ID_1;
+        string memory contentId = CONTENT_ID_1; // Use string ID
         uint64 expectedEndTime = uint64(block.timestamp + 5 days);
 
         vm.expectEmit(true, true, true, false);
@@ -791,39 +784,43 @@ contract FarcasterCrowdfundTest is Test {
     function testEmit_DonateAndMintNFT() public {
         uint128 crowdfundId = _createDefaultCrowdfund(CONTENT_ID_1);
         uint128 tokenId = 0; // Expect first token ID
+        string memory donationId = DONATION_ID_1; // Use string ID
 
         vm.prank(donor1);
-        // Expect DonationReceived event
-        vm.expectEmit(true, false, true, false);
-        emit FarcasterCrowdfund.DonationReceived(
-            crowdfundId,
-            CONTENT_ID_1,
-            DONATION_ID_1,
-            donor1,
-            DONATION_AMOUNT_1
-        );
 
-        // Expect NFTMinted event (for first donation)
-        vm.expectEmit(true, true, true, false); 
+        // Expect NFTMinted event (for first donation) - This happens first!
+        // Check indexed crowdfundId, contentId hash, donor, AND data (tokenId)
+        vm.expectEmit(true, true, true, true); 
         emit FarcasterCrowdfund.NFTMinted(
             crowdfundId,
-            CONTENT_ID_1,
+            CONTENT_ID_1, // Expect string ID
             donor1,
             tokenId
         );
 
-        crowdfund.donate(crowdfundId, DONATION_ID_1, DONATION_AMOUNT_1);
+        // Expect DonationReceived event - This happens second!
+        // Check indexed crowdfundId, donationId hash, donor, AND data (contentId, amount)
+        vm.expectEmit(true, true, true, true); 
+        emit FarcasterCrowdfund.DonationReceived(
+            crowdfundId,
+            CONTENT_ID_1, // Expect string ID
+            donationId, // Expect string ID
+            donor1,
+            DONATION_AMOUNT_1
+        );
+
+        crowdfund.donate(crowdfundId, donationId, DONATION_AMOUNT_1); // Use string ID
     }
 
     // ==========================================
     // Helper function to quickly create a standard crowdfund for tests
     // ==========================================
-    function _createDefaultCrowdfund(uint128 contentId) internal returns (uint128 crowdfundId) {
+    function _createDefaultCrowdfund(string memory contentId) internal returns (uint128 crowdfundId) { // Accept string
         vm.prank(projectOwner);
         return crowdfund.createCrowdfund(
             GOAL_AMOUNT, 
             DEFAULT_MAX_DURATION,
-            contentId
+            contentId // Pass string ID
         );
     }
 }

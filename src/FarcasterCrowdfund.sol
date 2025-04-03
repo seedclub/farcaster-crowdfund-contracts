@@ -5,13 +5,14 @@ import "@openzeppelin/contracts/token/ERC721/ERC721.sol";
 import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
+import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 
 /**
  * @title FarcasterCrowdfund
  * @dev All-in-one contract for crowdfunding with NFT rewards by Seed Club
- * @notice Version 0.0.5`
+ * @notice Version 0.0.7`
  */
-contract FarcasterCrowdfund is ERC721, Ownable {
+contract FarcasterCrowdfund is ERC721, Ownable, ReentrancyGuard {
     using SafeERC20 for IERC20;
 
     // ----- Struct definitions -----
@@ -21,7 +22,7 @@ contract FarcasterCrowdfund is ERC721, Ownable {
         uint128 goal; // Amount in USDC (with 6 decimals)
         uint128 totalRaised; // Total amount raised in USDC (with 6 decimals)
         uint64 endTimestamp; // Timestamp when the crowdfund ends
-        uint128 contentId; // Content ID facilitates proactive indexing on the offchain backend
+        string contentId; // Content ID (string) facilitates proactive indexing on the offchain backend
         address owner; // Address of the crowdfund creator
         bool fundsClaimed; // Whether the funds have been claimed
         bool cancelled; // Whether the crowdfund has been cancelled
@@ -52,19 +53,18 @@ contract FarcasterCrowdfund is ERC721, Ownable {
     mapping(uint128 => Crowdfund) public crowdfunds;
     // Mapping from crowdfundId to donor address to amount donated
     mapping(uint128 => mapping(address => uint128)) public donations;
-    // Track all donors for each crowdfund (for NFT claims)
-    mapping(uint128 => address[]) private _crowdfundDonors;
+    // Track if an address is a donor for a specific crowdfund
     mapping(uint128 => mapping(address => bool)) public isDonor; 
-    // Track if a content ID has been used (0 is ignored)
-    mapping(uint128 => bool) public contentIdUsed;
-    // Track if a donation ID has been used for a specific crowdfund (0 is ignored)
-    mapping(uint128 => mapping(uint128 => bool)) public donationIdUsed;
+    // Track if a content ID hash has been used (hash of "" is ignored)
+    mapping(bytes32 => bool) public contentIdUsed;
+    // Track if a donation ID hash has been used globally (hash of "" is ignored)
+    mapping(bytes32 => bool) public donationIdUsed;
 
     // ----- Events -----
 
     event CrowdfundCreated(
         uint128 indexed crowdfundId,
-        uint128 indexed contentId,
+        string indexed contentId,
         address indexed owner,
         uint128 fundingTarget,
         uint64 endTimestamp
@@ -72,35 +72,35 @@ contract FarcasterCrowdfund is ERC721, Ownable {
 
     event DonationReceived(
         uint128 indexed crowdfundId,
-        uint128 contentId,
-        uint128 indexed donationId,
+        string contentId,
+        string indexed donationId,
         address indexed donor,
         uint128 amount
     );
 
     event FundsClaimed(
         uint128 indexed crowdfundId,
-        uint128 indexed contentId,
+        string indexed contentId,
         address indexed owner,
         uint128 amount
     );
 
     event RefundIssued(
         uint128 indexed crowdfundId,
-        uint128 indexed contentId,
+        string indexed contentId,
         address indexed donor,
         uint128 amount
     );
 
     event CrowdfundCancelled(
         uint128 indexed crowdfundId,
-        uint128 indexed contentId,
+        string indexed contentId,
         address indexed owner
     );
 
     event NFTMinted(
         uint128 indexed crowdfundId,
-        uint128 indexed contentId,
+        string indexed contentId,
         address indexed donor,
         uint128 tokenId
     );
@@ -170,17 +170,18 @@ contract FarcasterCrowdfund is ERC721, Ownable {
     function createCrowdfund(
         uint128 fundraisingTarget,
         uint64 duration,
-        uint128 contentId
+        string memory contentId
     ) external returns (uint128) {
         require(!paused, "Contract is paused");
         require(fundraisingTarget > 0, "Goal must be greater than 0");
         require(duration > 0, "Duration must be greater than 0");
         require(duration <= maxDuration, "Duration exceeds maximum allowed");
 
-        // Check contentId uniqueness if not 0
-        if (contentId != 0) {
-            require(!contentIdUsed[contentId], "Content ID already used. Please use a unique ID or 0 for no content ID.");
-            contentIdUsed[contentId] = true;
+        // Check contentId uniqueness if not empty string
+        bytes32 contentIdHash = keccak256(abi.encodePacked(contentId));
+        if (contentIdHash != keccak256(abi.encodePacked(""))) {
+            require(!contentIdUsed[contentIdHash], "Content ID already used. Please use a unique ID or \"\" for no content ID.");
+            contentIdUsed[contentIdHash] = true;
         }
 
         uint128 crowdfundId = _crowdfundIdCounter;
@@ -215,7 +216,7 @@ contract FarcasterCrowdfund is ERC721, Ownable {
      */
     function donate(
         uint128 crowdfundId,
-        uint128 donationId,
+        string memory donationId,
         uint128 amount
     ) external crowdfundExists(crowdfundId) {
         Crowdfund storage cf = crowdfunds[crowdfundId];
@@ -224,31 +225,17 @@ contract FarcasterCrowdfund is ERC721, Ownable {
         require(block.timestamp < cf.endTimestamp, "Crowdfund has ended");
         require(!cf.cancelled, "Crowdfund has been cancelled");
 
-        // Check donationId uniqueness if not 0
-        if (donationId != 0) {
-            require(!donationIdUsed[crowdfundId][donationId], "Donation ID already used. Please use a unique ID or 0 for no donation ID.");
-            donationIdUsed[crowdfundId][donationId] = true;
+        // Check donationId uniqueness if not empty string
+        bytes32 donationIdHash = keccak256(abi.encodePacked(donationId));
+        if (donationIdHash != keccak256(abi.encodePacked(""))) {
+            require(!donationIdUsed[donationIdHash], "Donation ID already used. Please use a unique ID or \"\" for no donation ID.");
+            donationIdUsed[donationIdHash] = true;
         }
 
         // Track if this is a first-time donor to mint NFT
-        bool isFirstDonation = !isDonor[crowdfundId][msg.sender];
-
-        // Update donation records
-        if (isFirstDonation) {
-            _crowdfundDonors[crowdfundId].push(msg.sender);
+        if (!isDonor[crowdfundId][msg.sender]) {
             isDonor[crowdfundId][msg.sender] = true;
-        }
-
-        donations[crowdfundId][msg.sender] += amount;
-        cf.totalRaised += amount;
-
-        // Transfer USDC from donor to this contract
-        usdc.safeTransferFrom(msg.sender, address(this), amount);
-
-        emit DonationReceived(crowdfundId, cf.contentId, donationId, msg.sender, amount);
-
-        // Mint an NFT for first-time donors
-        if (isFirstDonation) {
+            // Mint NFT for first-time donors
             // Increment counter first to get the next token ID
             uint128 tokenId = _tokenIdCounter++;
 
@@ -261,6 +248,14 @@ contract FarcasterCrowdfund is ERC721, Ownable {
 
             emit NFTMinted(crowdfundId, cf.contentId, msg.sender, tokenId);
         }
+
+        donations[crowdfundId][msg.sender] += amount;
+        cf.totalRaised += amount;
+
+        // Transfer USDC from donor to this contract
+        usdc.safeTransferFrom(msg.sender, address(this), amount);
+
+        emit DonationReceived(crowdfundId, cf.contentId, donationId, msg.sender, amount);
     }
 
     /**
@@ -292,7 +287,7 @@ contract FarcasterCrowdfund is ERC721, Ownable {
      */
     function claimRefund(
         uint128 crowdfundId
-    ) external crowdfundExists(crowdfundId) {
+    ) external nonReentrant crowdfundExists(crowdfundId) {
         Crowdfund storage cf = crowdfunds[crowdfundId];
 
         require(
@@ -305,13 +300,14 @@ contract FarcasterCrowdfund is ERC721, Ownable {
         uint128 donationAmount = donations[crowdfundId][msg.sender];
         require(donationAmount > 0, "No donation to refund");
 
-        // Reset donation amount to prevent re-entrancy
+        // Effects: Reset donation amount to prevent re-entrancy
+
         donations[crowdfundId][msg.sender] = 0;
 
         // Decrease the totalRaised amount
         cf.totalRaised -= donationAmount;
 
-        // Transfer USDC back to the donor
+        // Interaction: Transfer USDC back to the donor
         usdc.safeTransfer(msg.sender, donationAmount);
 
         emit RefundIssued(
@@ -384,16 +380,6 @@ contract FarcasterCrowdfund is ERC721, Ownable {
         address donor
     ) external view crowdfundExists(crowdfundId) returns (uint128) {
         return donorToTokenId[crowdfundId][donor];
-    }
-
-    /**
-     * @dev Returns the list of donors for a crowdfund
-     * @param crowdfundId ID of the crowdfund
-     */
-    function getDonors(
-        uint128 crowdfundId
-    ) external view crowdfundExists(crowdfundId) returns (address[] memory) {
-        return _crowdfundDonors[crowdfundId];
     }
 
     /**
