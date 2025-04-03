@@ -10,7 +10,7 @@ import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 /**
  * @title FarcasterCrowdfund
  * @dev Time-limited USDC crowdfunds that issue commemorative NFTs to donors. Permissionless, open source, with no royalties or admin control over funds raised.
- * @notice Version 0.0.7`
+ * @notice Version 0.0.8`
  */
 contract FarcasterCrowdfund is ERC721, Ownable, ReentrancyGuard {
     using SafeERC20 for IERC20;
