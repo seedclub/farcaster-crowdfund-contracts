@@ -9,7 +9,7 @@ import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 
 /**
  * @title FarcasterCrowdfund
- * @dev All-in-one contract for crowdfunding with NFT rewards by Seed Club
+ * @dev Time-limited USDC crowdfunds that issue commemorative NFTs to donors. Permissionless, open source, with no royalties or admin control over funds raised.
  * @notice Version 0.0.7`
  */
 contract FarcasterCrowdfund is ERC721, Ownable, ReentrancyGuard {
@@ -22,13 +22,13 @@ contract FarcasterCrowdfund is ERC721, Ownable, ReentrancyGuard {
         uint128 goal; // Amount in USDC (with 6 decimals)
         uint128 totalRaised; // Total amount raised in USDC (with 6 decimals)
         uint64 endTimestamp; // Timestamp when the crowdfund ends
-        string contentId; // Content ID (string) facilitates proactive indexing on the offchain backend
+        bytes32 contentIdHash; // Hash of the Content ID facilitates proactive indexing on the offchain backend
         address owner; // Address of the crowdfund creator
         bool fundsClaimed; // Whether the funds have been claimed
         bool cancelled; // Whether the crowdfund has been cancelled
     }
 
-    // ----- State variables optimized for packing -----
+    // ----- State variables -----
 
     // USDC token address - immutable, does not use storage after deployment
     IERC20 public immutable usdc;
@@ -56,15 +56,15 @@ contract FarcasterCrowdfund is ERC721, Ownable, ReentrancyGuard {
     // Track if an address is a donor for a specific crowdfund
     mapping(uint128 => mapping(address => bool)) public isDonor; 
     // Track if a content ID hash has been used (hash of "" is ignored)
-    mapping(bytes32 => bool) public contentIdUsed;
+    mapping(bytes32 => bool) public contentIdHashUsed;
     // Track if a donation ID hash has been used globally (hash of "" is ignored)
-    mapping(bytes32 => bool) public donationIdUsed;
+    mapping(bytes32 => bool) public donationIdHashUsed;
 
     // ----- Events -----
 
     event CrowdfundCreated(
         uint128 indexed crowdfundId,
-        string indexed contentId,
+        bytes32 indexed contentIdHash,
         address indexed owner,
         uint128 fundingTarget,
         uint64 endTimestamp
@@ -72,35 +72,35 @@ contract FarcasterCrowdfund is ERC721, Ownable, ReentrancyGuard {
 
     event DonationReceived(
         uint128 indexed crowdfundId,
-        string contentId,
-        string indexed donationId,
+        bytes32 contentIdHash,
+        bytes32 indexed donationIdHash,
         address indexed donor,
         uint128 amount
     );
 
     event FundsClaimed(
         uint128 indexed crowdfundId,
-        string indexed contentId,
+        bytes32 indexed contentIdHash,
         address indexed owner,
         uint128 amount
     );
 
     event RefundIssued(
         uint128 indexed crowdfundId,
-        string indexed contentId,
+        bytes32 indexed contentIdHash,
         address indexed donor,
         uint128 amount
     );
 
     event CrowdfundCancelled(
         uint128 indexed crowdfundId,
-        string indexed contentId,
+        bytes32 indexed contentIdHash,
         address indexed owner
     );
 
     event NFTMinted(
         uint128 indexed crowdfundId,
-        string indexed contentId,
+        bytes32 indexed contentIdHash,
         address indexed donor,
         uint128 tokenId
     );
@@ -165,23 +165,22 @@ contract FarcasterCrowdfund is ERC721, Ownable, ReentrancyGuard {
      * @dev Creates a new crowdfunding campaign
      * @param fundraisingTarget Target amount in USDC (with 6 decimals)
      * @param duration Duration in seconds for the crowdfund
-     * @param contentId Content ID facilitates proactive indexing prior to the transaction landing onchain
+     * @param contentIdHash Hash of the Content ID (bytes32(0) if none). Facilitates proactive indexing prior to the transaction landing onchain.
      */
     function createCrowdfund(
         uint128 fundraisingTarget,
         uint64 duration,
-        string memory contentId
+        bytes32 contentIdHash
     ) external returns (uint128) {
         require(!paused, "Contract is paused");
         require(fundraisingTarget > 0, "Goal must be greater than 0");
         require(duration > 0, "Duration must be greater than 0");
         require(duration <= maxDuration, "Duration exceeds maximum allowed");
 
-        // Check contentId uniqueness if not empty string
-        bytes32 contentIdHash = keccak256(abi.encodePacked(contentId));
-        if (contentIdHash != keccak256(abi.encodePacked(""))) {
-            require(!contentIdUsed[contentIdHash], "Content ID already used. Please use a unique ID or \"\" for no content ID.");
-            contentIdUsed[contentIdHash] = true;
+        // Check contentId uniqueness if not empty hash
+        if (contentIdHash != bytes32(0)) {
+            require(!contentIdHashUsed[contentIdHash], "Content ID hash already used. Please use a unique hash or bytes32(0).");
+            contentIdHashUsed[contentIdHash] = true;
         }
 
         uint128 crowdfundId = _crowdfundIdCounter;
@@ -191,7 +190,7 @@ contract FarcasterCrowdfund is ERC721, Ownable, ReentrancyGuard {
             goal: fundraisingTarget,
             totalRaised: 0,
             endTimestamp: uint64(block.timestamp) + duration,
-            contentId: contentId,
+            contentIdHash: contentIdHash,
             owner: msg.sender,
             fundsClaimed: false,
             cancelled: false
@@ -199,7 +198,7 @@ contract FarcasterCrowdfund is ERC721, Ownable, ReentrancyGuard {
 
         emit CrowdfundCreated(
             crowdfundId,
-            contentId,
+            contentIdHash,
             msg.sender,
             fundraisingTarget,
             uint64(block.timestamp) + duration
@@ -211,12 +210,12 @@ contract FarcasterCrowdfund is ERC721, Ownable, ReentrancyGuard {
     /**
      * @dev Donate USDC to a crowdfund
      * @param crowdfundId ID of the crowdfund to donate to
-     * @param donationId Donation ID facilitates proactive indexing prior to the transaction landing onchain (0 if none)
+     * @param donationIdHash Hash of the Donation ID (bytes32(0) if none). Facilitates proactive indexing prior to the transaction landing onchain.
      * @param amount Amount of USDC to donate (with 6 decimals)
      */
     function donate(
         uint128 crowdfundId,
-        string memory donationId,
+        bytes32 donationIdHash,
         uint128 amount
     ) external crowdfundExists(crowdfundId) {
         Crowdfund storage cf = crowdfunds[crowdfundId];
@@ -225,11 +224,10 @@ contract FarcasterCrowdfund is ERC721, Ownable, ReentrancyGuard {
         require(block.timestamp < cf.endTimestamp, "Crowdfund has ended");
         require(!cf.cancelled, "Crowdfund has been cancelled");
 
-        // Check donationId uniqueness if not empty string
-        bytes32 donationIdHash = keccak256(abi.encodePacked(donationId));
-        if (donationIdHash != keccak256(abi.encodePacked(""))) {
-            require(!donationIdUsed[donationIdHash], "Donation ID already used. Please use a unique ID or \"\" for no donation ID.");
-            donationIdUsed[donationIdHash] = true;
+        // Check donationId uniqueness if not empty hash
+        if (donationIdHash != bytes32(0)) {
+            require(!donationIdHashUsed[donationIdHash], "Donation ID hash already used. Please use a unique hash or bytes32(0).");
+            donationIdHashUsed[donationIdHash] = true;
         }
 
         // Track if this is a first-time donor to mint NFT
@@ -246,7 +244,7 @@ contract FarcasterCrowdfund is ERC721, Ownable, ReentrancyGuard {
             // Use _safeMint for additional safety checks
             _safeMint(msg.sender, tokenId);
 
-            emit NFTMinted(crowdfundId, cf.contentId, msg.sender, tokenId);
+            emit NFTMinted(crowdfundId, cf.contentIdHash, msg.sender, tokenId);
         }
 
         donations[crowdfundId][msg.sender] += amount;
@@ -255,7 +253,7 @@ contract FarcasterCrowdfund is ERC721, Ownable, ReentrancyGuard {
         // Transfer USDC from donor to this contract
         usdc.safeTransferFrom(msg.sender, address(this), amount);
 
-        emit DonationReceived(crowdfundId, cf.contentId, donationId, msg.sender, amount);
+        emit DonationReceived(crowdfundId, cf.contentIdHash, donationIdHash, msg.sender, amount);
     }
 
     /**
@@ -278,7 +276,7 @@ contract FarcasterCrowdfund is ERC721, Ownable, ReentrancyGuard {
         // Transfer all USDC to the creator
         usdc.safeTransfer(cf.owner, cf.totalRaised);
 
-        emit FundsClaimed(crowdfundId, cf.contentId, cf.owner, cf.totalRaised);
+        emit FundsClaimed(crowdfundId, cf.contentIdHash, cf.owner, cf.totalRaised);
     }
 
     /**
@@ -312,7 +310,7 @@ contract FarcasterCrowdfund is ERC721, Ownable, ReentrancyGuard {
 
         emit RefundIssued(
             crowdfundId,
-            cf.contentId,
+            cf.contentIdHash,
             msg.sender,
             donationAmount
         );
@@ -333,7 +331,7 @@ contract FarcasterCrowdfund is ERC721, Ownable, ReentrancyGuard {
 
         cf.cancelled = true;
 
-        emit CrowdfundCancelled(crowdfundId, cf.contentId, cf.owner);
+        emit CrowdfundCancelled(crowdfundId, cf.contentIdHash, cf.owner);
     }
 
     /**
