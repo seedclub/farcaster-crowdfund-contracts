@@ -663,8 +663,109 @@ contract FarcasterCrowdfundTest is Test {
         crowdfund.tokenURI(999); // Assuming token 999 doesn't exist
     }
 
+    // ==========================================
+    //       UNIQUENESS CONSTRAINTS TESTS
+    // ==========================================
 
+    function test_RevertWhen_CreateDuplicateContentId() public {
+        // Create first crowdfund with Content ID 1
+        _createDefaultCrowdfund(CONTENT_ID_1);
 
+        // Attempt to create another with the same Content ID
+        vm.prank(projectOwner);
+        vm.expectRevert("Content ID already used. Please use a unique ID or 0 for no content ID.");
+        crowdfund.createCrowdfund(GOAL_AMOUNT, 5 days, CONTENT_ID_1);
+    }
+
+    function test_CreateWithContentIdZero() public {
+        // Create with content ID 0
+        vm.prank(projectOwner);
+        uint128 crowdfundId = crowdfund.createCrowdfund(GOAL_AMOUNT, 5 days, 0);
+        crowdfund.crowdfunds(crowdfundId); // Call getter to ensure it exists
+        // No revert expected, basic check that it exists
+        assertTrue(crowdfundId == 0); // First crowdfundId should be 0
+    }
+
+    function test_CreateMultipleWithContentIdZero() public {
+        // Create first with content ID 0
+        vm.prank(projectOwner);
+        uint128 crowdfundId1 = crowdfund.createCrowdfund(GOAL_AMOUNT, 5 days, 0);
+        assertTrue(crowdfundId1 == 0);
+
+        // Create second with content ID 0
+        vm.prank(projectOwner);
+        uint128 crowdfundId2 = crowdfund.createCrowdfund(GOAL_AMOUNT, 5 days, 0);
+        assertTrue(crowdfundId2 == 1);
+
+        // No reverts expected
+        crowdfund.crowdfunds(crowdfundId2); // Call getter to ensure it exists
+    }
+
+    function test_RevertWhen_DonateDuplicateDonationId() public {
+        // Setup
+        uint128 crowdfundId = _createDefaultCrowdfund(CONTENT_ID_1);
+        
+        // First donation with Donation ID 1
+        vm.startPrank(donor1);
+        crowdfund.donate(crowdfundId, DONATION_ID_1, DONATION_AMOUNT_1);
+        vm.stopPrank();
+
+        // Attempt second donation with the same Donation ID
+        vm.startPrank(donor2);
+        vm.expectRevert("Donation ID already used. Please use a unique ID or 0 for no donation ID.");
+        crowdfund.donate(crowdfundId, DONATION_ID_1, DONATION_AMOUNT_3);
+        vm.stopPrank();
+    }
+
+    function test_DonateSameDonationIdDifferentCrowdfunds() public {
+        // Setup two crowdfunds
+        uint128 crowdfundId1 = _createDefaultCrowdfund(CONTENT_ID_1);
+        uint128 crowdfundId2 = _createDefaultCrowdfund(CONTENT_ID_2);
+        
+        // Donate with Donation ID 1 to first crowdfund
+        vm.startPrank(donor1);
+        crowdfund.donate(crowdfundId1, DONATION_ID_1, DONATION_AMOUNT_1);
+        vm.stopPrank();
+
+        // Donate with the same Donation ID 1 to second crowdfund (should succeed)
+        vm.startPrank(donor2);
+        crowdfund.donate(crowdfundId2, DONATION_ID_1, DONATION_AMOUNT_3);
+        vm.stopPrank();
+
+        // Assert donation recorded on second crowdfund
+        assertEq(crowdfund.donations(crowdfundId2, donor2), DONATION_AMOUNT_3);
+    }
+
+    function test_DonateWithDonationIdZero() public {
+        uint128 crowdfundId = _createDefaultCrowdfund(CONTENT_ID_1);
+
+        // Donate with donation ID 0
+        vm.prank(donor1);
+        crowdfund.donate(crowdfundId, 0, DONATION_AMOUNT_1);
+
+        // Assert donation recorded
+        assertEq(crowdfund.donations(crowdfundId, donor1), DONATION_AMOUNT_1);
+    }
+
+    function test_DonateMultipleWithDonationIdZero() public {
+        uint128 crowdfundId = _createDefaultCrowdfund(CONTENT_ID_1);
+
+        // First donation with donation ID 0
+        vm.prank(donor1);
+        crowdfund.donate(crowdfundId, 0, DONATION_AMOUNT_1);
+        vm.stopPrank();
+
+        // Second donation with donation ID 0
+        vm.prank(donor2);
+        crowdfund.donate(crowdfundId, 0, DONATION_AMOUNT_3);
+        vm.stopPrank();
+
+        // Assert both donations recorded
+        assertEq(crowdfund.donations(crowdfundId, donor1), DONATION_AMOUNT_1);
+        assertEq(crowdfund.donations(crowdfundId, donor2), DONATION_AMOUNT_3);
+        (, uint128 totalRaised, ,,,, ) = crowdfund.crowdfunds(crowdfundId);
+        assertEq(totalRaised, DONATION_AMOUNT_1 + DONATION_AMOUNT_3);
+    }
 
     // ==========================================
     //       EVENT EMISSION TESTS (Examples)

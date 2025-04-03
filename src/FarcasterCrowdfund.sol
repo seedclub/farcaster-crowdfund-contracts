@@ -9,7 +9,7 @@ import "@openzeppelin/contracts/access/Ownable.sol";
 /**
  * @title FarcasterCrowdfund
  * @dev All-in-one contract for crowdfunding with NFT rewards by Seed Club
- * @notice Version 0.0.4
+ * @notice Version 0.0.5`
  */
 contract FarcasterCrowdfund is ERC721, Ownable {
     using SafeERC20 for IERC20;
@@ -55,6 +55,10 @@ contract FarcasterCrowdfund is ERC721, Ownable {
     // Track all donors for each crowdfund (for NFT claims)
     mapping(uint128 => address[]) private _crowdfundDonors;
     mapping(uint128 => mapping(address => bool)) public isDonor; 
+    // Track if a content ID has been used (0 is ignored)
+    mapping(uint128 => bool) public contentIdUsed;
+    // Track if a donation ID has been used for a specific crowdfund (0 is ignored)
+    mapping(uint128 => mapping(uint128 => bool)) public donationIdUsed;
 
     // ----- Events -----
 
@@ -173,6 +177,12 @@ contract FarcasterCrowdfund is ERC721, Ownable {
         require(duration > 0, "Duration must be greater than 0");
         require(duration <= maxDuration, "Duration exceeds maximum allowed");
 
+        // Check contentId uniqueness if not 0
+        if (contentId != 0) {
+            require(!contentIdUsed[contentId], "Content ID already used. Please use a unique ID or 0 for no content ID.");
+            contentIdUsed[contentId] = true;
+        }
+
         uint128 crowdfundId = _crowdfundIdCounter;
         _crowdfundIdCounter++;
 
@@ -213,6 +223,12 @@ contract FarcasterCrowdfund is ERC721, Ownable {
         require(amount > 0, "Amount must be greater than 0");
         require(block.timestamp < cf.endTimestamp, "Crowdfund has ended");
         require(!cf.cancelled, "Crowdfund has been cancelled");
+
+        // Check donationId uniqueness if not 0
+        if (donationId != 0) {
+            require(!donationIdUsed[crowdfundId][donationId], "Donation ID already used. Please use a unique ID or 0 for no donation ID.");
+            donationIdUsed[crowdfundId][donationId] = true;
+        }
 
         // Track if this is a first-time donor to mint NFT
         bool isFirstDonation = !isDonor[crowdfundId][msg.sender];
