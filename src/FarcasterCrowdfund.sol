@@ -10,7 +10,7 @@ import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
 /**
  * @title FarcasterCrowdfund
  * @dev Time-limited USDC crowdfunds that issue commemorative NFTs to donors. Permissionless, open source, with no royalties or admin control over funds raised.
- * @notice Version 0.0.8`
+ * @notice Version 0.0.8
  */
 contract FarcasterCrowdfund is ERC721, Ownable, ReentrancyGuard {
     using SafeERC20 for IERC20;
@@ -22,7 +22,7 @@ contract FarcasterCrowdfund is ERC721, Ownable, ReentrancyGuard {
         uint128 goal; // Amount in USDC (with 6 decimals)
         uint128 totalRaised; // Total amount raised in USDC (with 6 decimals)
         uint64 endTimestamp; // Timestamp when the crowdfund ends
-        bytes32 contentIdHash; // Hash of the Content ID facilitates proactive indexing on the offchain backend
+        bytes32 contentIdHash; // Hash of the Content ID. Facilitates indexing offchain. bytes32(0) if none
         address owner; // Address of the crowdfund creator
         bool fundsClaimed; // Whether the funds have been claimed
         bool cancelled; // Whether the crowdfund has been cancelled
@@ -30,7 +30,7 @@ contract FarcasterCrowdfund is ERC721, Ownable, ReentrancyGuard {
 
     // ----- State variables -----
 
-    // USDC token address - immutable, does not use storage after deployment
+    // USDC token address on this
     IERC20 public immutable usdc;
 
     // Base URI for metadata (e.g. https://crowdfund.seedclub.xyz/metadata/{tokenId})
@@ -139,6 +139,14 @@ contract FarcasterCrowdfund is ERC721, Ownable, ReentrancyGuard {
         _;
     }
 
+    /**
+     * @dev Modifier to check if the contract is not paused
+     */
+    modifier whenNotPaused() {
+        require(!paused, "Contract is paused");
+        _;
+    }
+
     // ----- Constructor -----
 
     /**
@@ -163,6 +171,7 @@ contract FarcasterCrowdfund is ERC721, Ownable, ReentrancyGuard {
 
     /**
      * @dev Creates a new crowdfunding campaign
+     * @notice Creates a new crowdfund campaign.
      * @param fundraisingTarget Target amount in USDC (with 6 decimals)
      * @param duration Duration in seconds for the crowdfund
      * @param contentIdHash Hash of the Content ID (bytes32(0) if none). Facilitates proactive indexing prior to the transaction landing onchain.
@@ -171,8 +180,7 @@ contract FarcasterCrowdfund is ERC721, Ownable, ReentrancyGuard {
         uint128 fundraisingTarget,
         uint64 duration,
         bytes32 contentIdHash
-    ) external returns (uint128) {
-        require(!paused, "Contract is paused");
+    ) external whenNotPaused returns (uint128) {
         require(fundraisingTarget > 0, "Goal must be greater than 0");
         require(duration > 0, "Duration must be greater than 0");
         require(duration <= maxDuration, "Duration exceeds maximum allowed");
@@ -209,15 +217,16 @@ contract FarcasterCrowdfund is ERC721, Ownable, ReentrancyGuard {
 
     /**
      * @dev Donate USDC to a crowdfund
+     * @notice Allows a user to donate USDC to a specific crowdfund and receive a commemorative NFT for their first donation.
      * @param crowdfundId ID of the crowdfund to donate to
-     * @param donationIdHash Hash of the Donation ID (bytes32(0) if none). Facilitates proactive indexing prior to the transaction landing onchain.
+     * @param donationIdHash Hash of the Donation ID. Facilitates proactive indexing.  bytes32(0) if none.
      * @param amount Amount of USDC to donate (with 6 decimals)
      */
     function donate(
         uint128 crowdfundId,
         bytes32 donationIdHash,
         uint128 amount
-    ) external crowdfundExists(crowdfundId) {
+    ) external whenNotPaused crowdfundExists(crowdfundId) {
         Crowdfund storage cf = crowdfunds[crowdfundId];
 
         require(amount > 0, "Amount must be greater than 0");
@@ -258,6 +267,7 @@ contract FarcasterCrowdfund is ERC721, Ownable, ReentrancyGuard {
 
     /**
      * @dev Allows the crowdfund creator to claim funds if goal is met
+     * @notice Allows the crowdfund owner to claim the raised funds if the goal is met after the end date.
      * @param crowdfundId ID of the crowdfund
      */
     function claimFunds(
@@ -281,6 +291,7 @@ contract FarcasterCrowdfund is ERC721, Ownable, ReentrancyGuard {
 
     /**
      * @dev Allows donors to claim refunds if goal is not met and crowdfund ended
+     * @notice Allows donors to reclaim their donated USDC if the crowdfund goal is not met by the end date or if the crowdfund is cancelled.
      * @param crowdfundId ID of the crowdfund
      */
     function claimRefund(
@@ -318,6 +329,7 @@ contract FarcasterCrowdfund is ERC721, Ownable, ReentrancyGuard {
 
     /**
      * @dev Allows the owner to cancel a crowdfund
+     * @notice Allows the crowdfund owner to cancel the campaign before it ends, enabling refunds.
      * @param crowdfundId ID of the crowdfund
      */
     function cancelCrowdfund(
@@ -336,6 +348,7 @@ contract FarcasterCrowdfund is ERC721, Ownable, ReentrancyGuard {
 
     /**
      * @dev Update the base metadata URI (only callable by owner)
+     * @notice (Owner only) Updates the base URI used for NFT metadata URLs.
      * @param newBaseURI The new base URI for metadata
      */
     function setBaseURI(string calldata newBaseURI) external onlyOwner {
@@ -346,6 +359,7 @@ contract FarcasterCrowdfund is ERC721, Ownable, ReentrancyGuard {
 
     /**
      * @dev Toggle the paused state (only callable by owner)
+     * @notice (Owner only) Pauses or unpauses the contract, preventing new crowdfund creations when paused.
      * @param _paused New paused state
      */
     function setPaused(bool _paused) external onlyOwner {
@@ -356,6 +370,7 @@ contract FarcasterCrowdfund is ERC721, Ownable, ReentrancyGuard {
 
     /**
      * @dev Update the maximum allowed duration for crowdfunds (only callable by owner)
+     * @notice (Owner only) Sets the maximum allowed duration for new crowdfunds.
      * @param _maxDuration New maximum duration in seconds
      */
     function setMaxDuration(uint64 _maxDuration) external onlyOwner {
@@ -369,6 +384,7 @@ contract FarcasterCrowdfund is ERC721, Ownable, ReentrancyGuard {
 
     /**
      * @dev Returns the token ID for a donor of a specific crowdfund
+     * @notice Returns the NFT token ID associated with a specific donor for a given crowdfund.
      * @param crowdfundId ID of the crowdfund
      * @param donor Address of the donor
      * @return tokenId The donor's NFT token ID (0 if none)
@@ -382,6 +398,7 @@ contract FarcasterCrowdfund is ERC721, Ownable, ReentrancyGuard {
 
     /**
      * @dev Custom token URI that points to your existing metadata endpoint
+     * @notice Returns the metadata URI for a given NFT token ID.
      * @param tokenId ID of the token
      */
     function tokenURI(
