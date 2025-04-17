@@ -4,7 +4,9 @@ pragma solidity ^0.8.19;
 import {Test, console} from "forge-std/Test.sol";
 import {FarcasterCrowdfund} from "../src/FarcasterCrowdfund.sol";
 import {MockERC20} from "./mocks/MockERC20.sol";
+import {MockReentrancyAttacker} from "./mocks/MockReentrancyAttacker.sol";
 import {Ownable} from "@openzeppelin/contracts/access/Ownable.sol";
+import {Pausable} from "@openzeppelin/contracts/utils/Pausable.sol";
 
 contract FarcasterCrowdfundTest is Test {
     FarcasterCrowdfund public crowdfund;
@@ -173,15 +175,9 @@ contract FarcasterCrowdfundTest is Test {
         vm.startPrank(donor1);
         usdc.approve(address(crowdfund), DONATION_AMOUNT_1);
         
-        // Debug: Check if donor is marked as donor before donation
-        console.log("Before donation - isDonor:", crowdfund.isDonor(crowdfundId, donor1));
-        
         // Donate to the crowdfund
         crowdfund.donate(crowdfundId, donationHash, DONATION_AMOUNT_1);
         vm.stopPrank();
-        
-        // Debug: Check if donor is marked as donor after donation
-        console.log("After donation - isDonor:", crowdfund.isDonor(crowdfundId, donor1));
         
         // Check donation was recorded
         (, uint128 totalRaised, ,,,, ) = crowdfund.crowdfunds(crowdfundId);
@@ -191,8 +187,8 @@ contract FarcasterCrowdfundTest is Test {
         // Check NFT was minted
         uint128 tokenId = crowdfund.donorToTokenId(crowdfundId, donor1);
         console.log("Token ID:", tokenId);
-        // First NFT should have token ID 0
-        assertEq(tokenId, 0, "First NFT should have token ID 0");
+        // First NFT should have token ID 1 (counter starts at 1)
+        assertEq(tokenId, 1, "First NFT should have token ID 1");
         assertEq(crowdfund.ownerOf(tokenId), donor1);
         // Need to read the tokenToCrowdfund mapping with uint256 key as per definition
         assertEq(crowdfund.tokenToCrowdfund(uint256(tokenId)), crowdfundId); 
@@ -332,6 +328,62 @@ contract FarcasterCrowdfundTest is Test {
     }
 
     // ==========================================
+    //   REENTRANCY PROTECTION TESTS
+    // ==========================================
+function test_ReentrancyProtection_ClaimFunds() public {
+    // Create a crowdfund with attacker as owner
+    MockReentrancyAttacker attacker = new MockReentrancyAttacker(payable(address(crowdfund)), address(usdc));
+    
+    vm.prank(address(attacker));
+    bytes32 contentHash = keccak256(abi.encodePacked("attacker-crowdfund"));
+    uint128 crowdfundId = crowdfund.createCrowdfund(
+        GOAL_AMOUNT,
+        5 days,
+        contentHash
+    );
+    
+    // Fund the crowdfund to reach goal
+    vm.startPrank(donor1);
+    usdc.approve(address(crowdfund), GOAL_AMOUNT);
+    crowdfund.donate(crowdfundId, bytes32(0), GOAL_AMOUNT);
+    vm.stopPrank();
+    
+    // Warp past end time
+    vm.warp(block.timestamp + 6 days);
+    
+    // Give attacker some USDC
+    usdc.mint(address(attacker), 1 * 10**6);
+    
+    // Setup attack
+    attacker.setupAttack(crowdfundId);
+    
+    // Make attacker address a proxy contract that can detect and intercept calls
+    vm.etch(address(attacker), address(new MockReentrancyAttacker(payable(address(crowdfund)), address(usdc))).code);
+    
+    // Now verify the prevention of reentrancy by checking state before and after
+    uint256 initialBalance = usdc.balanceOf(address(attacker));
+    
+    // Track whether claimFunds was executed successfully
+    bool claimExecutedSuccessfully = false;
+    try attacker.executeAttack() {
+        claimExecutedSuccessfully = true;
+    } catch {
+        claimExecutedSuccessfully = false;
+    }
+    
+    // If nonReentrant is present, the claim should execute once only
+    assertTrue(claimExecutedSuccessfully, "Primary claim should succeed");
+    
+    // Check we got paid exactly once (not twice)
+    uint256 finalBalance = usdc.balanceOf(address(attacker));
+    assertEq(finalBalance - initialBalance, GOAL_AMOUNT, "Should receive payment exactly once");
+    
+    // Check crowdfund is marked as claimed
+    (,,,,, bool fundsClaimed,) = crowdfund.crowdfunds(crowdfundId);
+    assertTrue(fundsClaimed, "Crowdfund should be marked as claimed");
+}
+
+    // ==========================================
     //   REVERT TESTS (Edge Cases & Access)
     // ==========================================
 
@@ -413,24 +465,28 @@ contract FarcasterCrowdfundTest is Test {
     function test_SetBaseURI() public {
         string memory newBaseURI = "https://new.uri/";
 
-        // Expect event
-        vm.expectEmit(true, true, true, true);
-        emit FarcasterCrowdfund.BaseURIUpdated(BASE_URI, newBaseURI, contractDeployer);
+        // Create a crowdfund and mint token ID 1 first
+        uint128 crowdfundId = _createDefaultCrowdfund(CONTENT_HASH_10); // Creates crowdfundId 0
+        vm.prank(donor1);
+        crowdfund.donate(crowdfundId, DONATION_HASH_10, DONATION_AMOUNT_1); // Mints tokenId 1
+        uint128 tokenId = crowdfund.donorToTokenId(crowdfundId, donor1);
+        assertEq(tokenId, 1, "Token ID should be 1");
+        assertEq(crowdfundId, 0, "Crowdfund ID should be 0");
 
-        // Call by owner
+        // Check event emission
+        vm.expectEmit(true, true, true, true);
+        emit FarcasterCrowdfund.BaseURIUpdated(BASE_URI, newBaseURI);
+
+        // Change owner and call setBaseURI
         vm.prank(contractDeployer);
         crowdfund.setBaseURI(newBaseURI);
 
-        // Verify with tokenURI (requires minting a token first)
-        uint128 crowdfundId = _createDefaultCrowdfund(CONTENT_HASH_10); // Use bytes32
-        vm.prank(donor1);
-        crowdfund.donate(crowdfundId, DONATION_HASH_10, DONATION_AMOUNT_1); // Use bytes32
-        uint128 tokenId = crowdfund.donorToTokenId(crowdfundId, donor1);
-
-        assertEq(crowdfund.tokenURI(tokenId), string(abi.encodePacked(newBaseURI, "0")));
+        // Verify tokenURI uses the new base URI and the correct crowdfund ID
+        string memory expectedURI = string(abi.encodePacked(newBaseURI, "0"));
+        assertEq(crowdfund.tokenURI(tokenId), expectedURI);
     }
 
-    function test_RevertWhen_SetBaseURINotOwner() public {
+    function test_Revert_SetBaseURI_NotOwner() public {
         vm.prank(nonOwner);
         // Note: Using try/catch as vm.expectRevert had issues matching the 
         // specific OwnableUnauthorizedAccount custom error data in this environment.
@@ -444,38 +500,49 @@ contract FarcasterCrowdfundTest is Test {
         assertTrue(reverted, "Call did not revert as expected");
     }
 
-    function test_SetPaused() public {
-        // Expect event for pausing
-        vm.expectEmit(true, true, true, true);
-        emit FarcasterCrowdfund.PauseStateUpdated(false, true, contractDeployer);
-
+    function test_PauseAndUnpause() public { 
         // Pause by owner
         vm.prank(contractDeployer);
-        crowdfund.setPaused(true);
+        crowdfund.pause();
         assertTrue(crowdfund.paused());
-
-        // Expect event for unpausing
-        vm.expectEmit(true, true, true, true);
-        emit FarcasterCrowdfund.PauseStateUpdated(true, false, contractDeployer);
 
         // Unpause by owner
         vm.prank(contractDeployer);
-        crowdfund.setPaused(false);
+        crowdfund.unpause();
         assertFalse(crowdfund.paused());
     }
 
-    function test_RevertWhen_SetPausedNotOwner() public {
+    function test_RevertWhen_PauseNotOwner() public {
         vm.prank(nonOwner);
         // Note: Using try/catch as vm.expectRevert had issues matching the 
         // specific OwnableUnauthorizedAccount custom error data in this environment.
         // This still confirms the call reverts due to lack of ownership.
         bool reverted = false;
-        try crowdfund.setPaused(true) {
+        try crowdfund.pause() {
             // Should not reach here
         } catch {
             reverted = true;
         }
         assertTrue(reverted, "Call did not revert as expected");
+    }
+
+    function test_RevertWhen_UnpauseNotOwner() public {
+        // First, pause as owner
+        vm.prank(contractDeployer);
+        crowdfund.pause();
+        assertTrue(crowdfund.paused(), "Contract should be paused initially");
+
+        // Attempt unpause as non-owner
+        vm.prank(nonOwner);
+        bool reverted = false;
+        try crowdfund.unpause() {
+            // Should not reach here
+        } catch {
+            reverted = true;
+        }
+        assertTrue(reverted, "Unpause Call did not revert as expected");
+        // Ensure still paused
+        assertTrue(crowdfund.paused(), "Contract should remain paused");
     }
 
     function test_SetMaxDuration() public {
@@ -518,11 +585,55 @@ contract FarcasterCrowdfundTest is Test {
 
     function test_RevertWhen_CreateCrowdfundPaused() public {
         vm.prank(contractDeployer);
-        crowdfund.setPaused(true); // Pause
+        crowdfund.pause(); // Pause using new function
 
         vm.prank(projectOwner);
-        vm.expectRevert("Contract is paused");
-        crowdfund.createCrowdfund(GOAL_AMOUNT, 5 days, CONTENT_HASH_1);
+        vm.expectRevert(bytes4(keccak256("EnforcedPause()"))); // Updated expectation
+        crowdfund.createCrowdfund(GOAL_AMOUNT, 5 days, CONTENT_HASH_11);
+    }
+
+    function test_RevertWhen_DonatePaused() public {
+        uint128 crowdfundId = _createDefaultCrowdfund(CONTENT_HASH_11);
+
+        vm.prank(contractDeployer);
+        crowdfund.pause(); // Pause
+
+        vm.startPrank(donor1);
+        vm.expectRevert(bytes4(keccak256("EnforcedPause()"))); // Updated expectation
+        crowdfund.donate(crowdfundId, DONATION_HASH_1, DONATION_AMOUNT_1);
+        vm.stopPrank();
+    }
+
+    function test_RevertWhen_ClaimFundsPaused() public {
+        uint128 crowdfundId = _createDefaultCrowdfund(CONTENT_HASH_11);
+        // Meet goal
+        vm.startPrank(donor1);
+        crowdfund.donate(crowdfundId, DONATION_HASH_1, GOAL_AMOUNT);
+        vm.stopPrank();
+        vm.warp(block.timestamp + DEFAULT_MAX_DURATION + 1 days);
+
+        vm.prank(contractDeployer);
+        crowdfund.pause(); // Pause
+
+        vm.prank(projectOwner);
+        vm.expectRevert(bytes4(keccak256("EnforcedPause()"))); // Updated expectation
+        crowdfund.claimFunds(crowdfundId);
+    }
+
+    function test_RevertWhen_ClaimRefundPaused() public {
+        uint128 crowdfundId = _createDefaultCrowdfund(CONTENT_HASH_11);
+        // Donate less than goal
+        vm.startPrank(donor1);
+        crowdfund.donate(crowdfundId, DONATION_HASH_1, DONATION_AMOUNT_1);
+        vm.stopPrank();
+        vm.warp(block.timestamp + DEFAULT_MAX_DURATION + 1 days);
+
+        vm.prank(contractDeployer);
+        crowdfund.pause(); // Pause
+
+        vm.prank(donor1);
+        vm.expectRevert(bytes4(keccak256("EnforcedPause()"))); // Updated expectation
+        crowdfund.claimRefund(crowdfundId);
     }
 
     // ==========================================
@@ -673,10 +784,11 @@ contract FarcasterCrowdfundTest is Test {
         uint128 crowdfundId = _createDefaultCrowdfund(CONTENT_HASH_16); // Use bytes32
         vm.prank(donor1);
         crowdfund.donate(crowdfundId, DONATION_HASH_16, DONATION_AMOUNT_1); // Use bytes32
-        uint128 expectedTokenId = 0; // First token minted
+        uint128 expectedTokenId = 1; // First token minted is 1
 
-        assertEq(crowdfund.getDonorTokenId(crowdfundId, donor1), expectedTokenId);
-        assertEq(crowdfund.getDonorTokenId(crowdfundId, donor2), 0); // Donor 2 hasn't donated
+        // Access the mapping directly
+        assertEq(crowdfund.donorToTokenId(crowdfundId, donor1), expectedTokenId);
+        assertEq(crowdfund.donorToTokenId(crowdfundId, donor2), 0); // Donor 2 hasn't donated
     }
 
     function test_TokenURI() public {
@@ -820,7 +932,7 @@ contract FarcasterCrowdfundTest is Test {
 
     function testEmit_DonateAndMintNFT() public {
         uint128 crowdfundId = _createDefaultCrowdfund(CONTENT_HASH_1);
-        uint128 tokenId = 0; // Expect first token ID
+        uint128 tokenId = 1; // Expect first token ID to be 1
         bytes32 donationHash = DONATION_HASH_1;
 
         vm.prank(donor1);
@@ -859,5 +971,71 @@ contract FarcasterCrowdfundTest is Test {
             DEFAULT_MAX_DURATION,
             contentHash // Pass bytes32
         );
+    }
+
+    // --- ETH Transfer Tests ---
+
+    function test_Revert_SendETH_Fallback() public {
+        // Attempt to send ETH via fallback
+        vm.expectRevert("Function not found or ETH transfers not accepted");
+        (bool success, ) = address(crowdfund).call{value: 1 ether}("");
+        assertFalse(success, "Fallback ETH transfer should fail");
+    }
+
+    // Removed test_Revert_SendETH_Receive as receive() is merged into fallback()
+
+    // --- Reentrancy Guard Tests ---
+
+    function test_ReentrancyGuard_ClaimFunds() public {
+        // Create a crowdfund with attacker as owner
+        MockReentrancyAttacker attacker = new MockReentrancyAttacker(payable(address(crowdfund)), address(usdc));
+        
+        vm.prank(address(attacker));
+        bytes32 contentHash = keccak256(abi.encodePacked("attacker-crowdfund"));
+        uint128 crowdfundId = crowdfund.createCrowdfund(
+            GOAL_AMOUNT,
+            5 days,
+            contentHash
+        );
+        
+        // Fund the crowdfund to reach goal
+        vm.startPrank(donor1);
+        usdc.approve(address(crowdfund), GOAL_AMOUNT);
+        crowdfund.donate(crowdfundId, bytes32(0), GOAL_AMOUNT);
+        vm.stopPrank();
+        
+        // Warp past end time
+        vm.warp(block.timestamp + 6 days);
+        
+        // Give attacker some USDC
+        usdc.mint(address(attacker), 1 * 10**6);
+        
+        // Setup attack
+        attacker.setupAttack(crowdfundId);
+        
+        // Make attacker address a proxy contract that can detect and intercept calls
+        vm.etch(address(attacker), address(new MockReentrancyAttacker(payable(address(crowdfund)), address(usdc))).code);
+        
+        // Now verify the prevention of reentrancy by checking state before and after
+        uint256 initialBalance = usdc.balanceOf(address(attacker));
+        
+        // Track whether claimFunds was executed successfully
+        bool claimExecutedSuccessfully = false;
+        try attacker.executeAttack() {
+            claimExecutedSuccessfully = true;
+        } catch {
+            claimExecutedSuccessfully = false;
+        }
+        
+        // If nonReentrant is present, the claim should execute once only
+        assertTrue(claimExecutedSuccessfully, "Primary claim should succeed");
+        
+        // Check we got paid exactly once (not twice)
+        uint256 finalBalance = usdc.balanceOf(address(attacker));
+        assertEq(finalBalance - initialBalance, GOAL_AMOUNT, "Should receive payment exactly once");
+        
+        // Check crowdfund is marked as claimed
+        (,,,,, bool fundsClaimed,) = crowdfund.crowdfunds(crowdfundId);
+        assertTrue(fundsClaimed, "Crowdfund should be marked as claimed");
     }
 }

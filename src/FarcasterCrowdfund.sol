@@ -6,13 +6,14 @@ import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 import "@openzeppelin/contracts/access/Ownable.sol";
 import "@openzeppelin/contracts/utils/ReentrancyGuard.sol";
+import "@openzeppelin/contracts/utils/Pausable.sol";
 
 /**
  * @title FarcasterCrowdfund
  * @dev Time-limited USDC crowdfunds that issue commemorative NFTs to donors. Permissionless, open source, with no royalties or admin control over funds raised.
- * @notice Version 0.0.8
+ * @notice Version 0.0.9
  */
-contract FarcasterCrowdfund is ERC721, Ownable, ReentrancyGuard {
+contract FarcasterCrowdfund is ERC721, Ownable, ReentrancyGuard, Pausable {
     using SafeERC20 for IERC20;
 
     // ----- Struct definitions -----
@@ -33,16 +34,15 @@ contract FarcasterCrowdfund is ERC721, Ownable, ReentrancyGuard {
     // USDC token address on this
     IERC20 public immutable usdc;
 
-    // Base URI for metadata (e.g. https://crowdfund.seedclub.xyz/metadata/{tokenId})
+    // Base URI for metadata (e.g. https://crowdfund.seedclub.com/crowdfund/})
     string private _baseMetadataURI;
 
     // Counters
-    uint128 private _tokenIdCounter;
+    uint128 private _tokenIdCounter = 1;
     uint128 private _crowdfundIdCounter;
-    
+
     // Time and state variables - can be packed together
     uint64 public maxDuration;
-    bool public paused = false;
 
     // Mappings - cannot be packed
     // Maps NFT token IDs to their corresponding crowdfund IDs
@@ -53,8 +53,6 @@ contract FarcasterCrowdfund is ERC721, Ownable, ReentrancyGuard {
     mapping(uint128 => Crowdfund) public crowdfunds;
     // Mapping from crowdfundId to donor address to amount donated
     mapping(uint128 => mapping(address => uint128)) public donations;
-    // Track if an address is a donor for a specific crowdfund
-    mapping(uint128 => mapping(address => bool)) public isDonor; 
     // Track if a content ID hash has been used (hash of "" is ignored)
     mapping(bytes32 => bool) public contentIdHashUsed;
     // Track if a donation ID hash has been used globally (hash of "" is ignored)
@@ -108,14 +106,7 @@ contract FarcasterCrowdfund is ERC721, Ownable, ReentrancyGuard {
     // Admin events
     event BaseURIUpdated(
         string oldBaseURI,
-        string newBaseURI,
-        address indexed owner
-    );
-
-    event PauseStateUpdated(
-        bool oldPauseState,
-        bool newPauseState,
-        address indexed owner
+        string newBaseURI
     );
 
     event MaxDurationUpdated(
@@ -136,14 +127,6 @@ contract FarcasterCrowdfund is ERC721, Ownable, ReentrancyGuard {
                 crowdfunds[crowdfundId].owner != address(0),
             "Crowdfund does not exist"
         );
-        _;
-    }
-
-    /**
-     * @dev Modifier to check if the contract is not paused
-     */
-    modifier whenNotPaused() {
-        require(!paused, "Contract is paused");
         _;
     }
 
@@ -187,7 +170,10 @@ contract FarcasterCrowdfund is ERC721, Ownable, ReentrancyGuard {
 
         // Check contentId uniqueness if not empty hash
         if (contentIdHash != bytes32(0)) {
-            require(!contentIdHashUsed[contentIdHash], "Content ID hash already used. Please use a unique hash or bytes32(0).");
+            require(
+                !contentIdHashUsed[contentIdHash],
+                "Content ID hash already used. Please use a unique hash or bytes32(0)."
+            );
             contentIdHashUsed[contentIdHash] = true;
         }
 
@@ -235,13 +221,15 @@ contract FarcasterCrowdfund is ERC721, Ownable, ReentrancyGuard {
 
         // Check donationId uniqueness if not empty hash
         if (donationIdHash != bytes32(0)) {
-            require(!donationIdHashUsed[donationIdHash], "Donation ID hash already used. Please use a unique hash or bytes32(0).");
+            require(
+                !donationIdHashUsed[donationIdHash],
+                "Donation ID hash already used. Please use a unique hash or bytes32(0)."
+            );
             donationIdHashUsed[donationIdHash] = true;
         }
 
         // Track if this is a first-time donor to mint NFT
-        if (!isDonor[crowdfundId][msg.sender]) {
-            isDonor[crowdfundId][msg.sender] = true;
+        if (donorToTokenId[crowdfundId][msg.sender] == 0) {
             // Mint NFT for first-time donors
             // Increment counter first to get the next token ID
             uint128 tokenId = _tokenIdCounter++;
@@ -262,7 +250,13 @@ contract FarcasterCrowdfund is ERC721, Ownable, ReentrancyGuard {
         // Transfer USDC from donor to this contract
         usdc.safeTransferFrom(msg.sender, address(this), amount);
 
-        emit DonationReceived(crowdfundId, cf.contentIdHash, donationIdHash, msg.sender, amount);
+        emit DonationReceived(
+            crowdfundId,
+            cf.contentIdHash,
+            donationIdHash,
+            msg.sender,
+            amount
+        );
     }
 
     /**
@@ -272,10 +266,10 @@ contract FarcasterCrowdfund is ERC721, Ownable, ReentrancyGuard {
      */
     function claimFunds(
         uint128 crowdfundId
-    ) external crowdfundExists(crowdfundId) {
+    ) external whenNotPaused crowdfundExists(crowdfundId) nonReentrant {
         Crowdfund storage cf = crowdfunds[crowdfundId];
 
-        require(msg.sender == cf.owner, "Not the crowdfund owner");
+        require(msg.sender == cf.owner, "Only the owner can claim funds");
         require(block.timestamp > cf.endTimestamp, "Crowdfund not ended yet");
         require(cf.totalRaised >= cf.goal, "Goal not met");
         require(!cf.fundsClaimed, "Funds already claimed");
@@ -286,7 +280,12 @@ contract FarcasterCrowdfund is ERC721, Ownable, ReentrancyGuard {
         // Transfer all USDC to the creator
         usdc.safeTransfer(cf.owner, cf.totalRaised);
 
-        emit FundsClaimed(crowdfundId, cf.contentIdHash, cf.owner, cf.totalRaised);
+        emit FundsClaimed(
+            crowdfundId,
+            cf.contentIdHash,
+            cf.owner,
+            cf.totalRaised
+        );
     }
 
     /**
@@ -296,7 +295,7 @@ contract FarcasterCrowdfund is ERC721, Ownable, ReentrancyGuard {
      */
     function claimRefund(
         uint128 crowdfundId
-    ) external nonReentrant crowdfundExists(crowdfundId) {
+    ) external whenNotPaused crowdfundExists(crowdfundId) nonReentrant {
         Crowdfund storage cf = crowdfunds[crowdfundId];
 
         require(
@@ -354,18 +353,7 @@ contract FarcasterCrowdfund is ERC721, Ownable, ReentrancyGuard {
     function setBaseURI(string calldata newBaseURI) external onlyOwner {
         string memory oldBaseURI = _baseMetadataURI;
         _baseMetadataURI = newBaseURI;
-        emit BaseURIUpdated(oldBaseURI, newBaseURI, msg.sender);
-    }
-
-    /**
-     * @dev Toggle the paused state (only callable by owner)
-     * @notice (Owner only) Pauses or unpauses the contract, preventing new crowdfund creations when paused.
-     * @param _paused New paused state
-     */
-    function setPaused(bool _paused) external onlyOwner {
-        bool oldPauseState = paused;
-        paused = _paused;
-        emit PauseStateUpdated(oldPauseState, _paused, msg.sender);
+        emit BaseURIUpdated(oldBaseURI, newBaseURI);
     }
 
     /**
@@ -380,24 +368,42 @@ contract FarcasterCrowdfund is ERC721, Ownable, ReentrancyGuard {
         emit MaxDurationUpdated(oldMaxDuration, _maxDuration, msg.sender);
     }
 
-    // ----- External view functions -----
-
     /**
-     * @dev Returns the token ID for a donor of a specific crowdfund
-     * @notice Returns the NFT token ID associated with a specific donor for a given crowdfund.
-     * @param crowdfundId ID of the crowdfund
-     * @param donor Address of the donor
-     * @return tokenId The donor's NFT token ID (0 if none)
+     * @dev Allows the contract owner to rescue any ERC20 tokens other than USDC
+     * @param tokenAddress Address of the ERC20 token to be rescued
+     * @param to Address to send the tokens to
+     * @param amount Amount of tokens to rescue
      */
-    function getDonorTokenId(
-        uint128 crowdfundId,
-        address donor
-    ) external view crowdfundExists(crowdfundId) returns (uint128) {
-        return donorToTokenId[crowdfundId][donor];
+    function rescueERC20(
+        address tokenAddress,
+        address to,
+        uint256 amount
+    ) external onlyOwner {
+        require(tokenAddress != address(usdc), "Cannot withdraw USDC");
+        IERC20 token = IERC20(tokenAddress);
+        token.safeTransfer(to, amount);
     }
 
     /**
-     * @dev Custom token URI that points to your existing metadata endpoint
+     * @dev Pause the contract (only owner)
+     * @notice Uses OpenZeppelin Pausable _pause function.
+     */
+    function pause() external onlyOwner {
+        _pause();
+    }
+
+    /**
+     * @dev Unpause the contract (only owner)
+     * @notice Uses OpenZeppelin Pausable _unpause function.
+     */
+    function unpause() external onlyOwner {
+        _unpause();
+    }
+
+    // ----- External view functions -----
+
+    /**
+     * @dev Custom token URI that points to a metadata endpoint that's the same across all NFTs from a given crowdfund
      * @notice Returns the metadata URI for a given NFT token ID.
      * @param tokenId ID of the token
      */
@@ -406,7 +412,16 @@ contract FarcasterCrowdfund is ERC721, Ownable, ReentrancyGuard {
     ) public view override returns (string memory) {
         require(_ownerOf(tokenId) != address(0), "Token does not exist");
 
-        return string(abi.encodePacked(_baseMetadataURI, toString(tokenId)));
+        return string(abi.encodePacked(_baseMetadataURI, toString(tokenToCrowdfund[tokenId])));
+    }
+
+    // ----- Receive and fallback functions -----
+
+    /**
+     * @dev Prevents ETH from being sent to non-existent functions or directly
+     */
+    fallback() external {
+        revert("Function not found or ETH transfers not accepted");
     }
 
     // ----- Internal pure functions -----

@@ -11,7 +11,7 @@ contract DeployBaseSepolia is Script {
     address public constant USDC_ADDRESS = 0x036CbD53842c5426634e7929541eC2318f3dCF7e; // Update this if needed
     
     // Base URI for NFT metadata
-    string public constant BASE_URI = "https://test.crowdfund.seedclub.com/nfts/";
+    string public constant BASE_URI = "https://crowdfund.seedclub.com/crowdfund/";
     
     // Maximum crowdfund duration (7 days)
     uint64 public constant MAX_DURATION = 7 days;

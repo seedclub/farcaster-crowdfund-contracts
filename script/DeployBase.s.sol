@@ -9,7 +9,7 @@ contract DeployBase is Script {
     address public constant USDC_ADDRESS = 0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913;
     
     // Base URI for NFT metadata
-    string public constant BASE_URI = "https://crowdfund.seedclub.com/nfts/";
+    string public constant BASE_URI = "https://crowdfund.seedclub.com/crowdfund/";
     
     // Maximum crowdfund duration (7 days)
     uint64 public constant MAX_DURATION = 7 days;
