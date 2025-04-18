@@ -11,7 +11,7 @@ import "@openzeppelin/contracts/utils/Pausable.sol";
 /**
  * @title FarcasterCrowdfund
  * @dev Time-limited USDC crowdfunds that issue commemorative NFTs to donors. Permissionless, open source, with no royalties or admin control over funds raised.
- * @notice Version 0.1.0
+ * @notice Version 0.1.1
  */
 contract FarcasterCrowdfund is ERC721, Ownable, ReentrancyGuard, Pausable {
     using SafeERC20 for IERC20;
@@ -26,13 +26,21 @@ contract FarcasterCrowdfund is ERC721, Ownable, ReentrancyGuard, Pausable {
     error CrowdfundHasEnded(uint128 crowdfundId, uint64 endTimestamp);
     error ErrorCrowdfundCancelled(uint128 crowdfundId);
     error DonationIdHashAlreadyUsed(bytes32 donationIdHash);
-    error CrowdfundOwnerRequired(uint128 crowdfundId, address caller, address owner);
+    error CrowdfundOwnerRequired(
+        uint128 crowdfundId,
+        address caller,
+        address owner
+    );
     error CrowdfundNotEnded(uint128 crowdfundId, uint64 endTimestamp);
     error GoalNotMet(uint128 crowdfundId, uint128 goal, uint128 totalRaised);
     error FundsAlreadyClaimed(uint128 crowdfundId);
     error RefundsNotAvailable(uint128 crowdfundId);
     error NoDonationToRefund(uint128 crowdfundId, address donor);
-    error CrowdfundGoalWasMet(uint128 crowdfundId, uint128 goal, uint128 totalRaised);
+    error CrowdfundGoalWasMet(
+        uint128 crowdfundId,
+        uint128 goal,
+        uint128 totalRaised
+    );
     error CrowdfundWasCancelled(uint128 crowdfundId);
     error FundsAlreadyClaimedByOwner(uint128 crowdfundId);
     error StartIndexOutOfBounds(uint256 startIndex, uint256 count);
@@ -124,7 +132,8 @@ contract FarcasterCrowdfund is ERC721, Ownable, ReentrancyGuard, Pausable {
     event CrowdfundCancelled(
         uint128 indexed crowdfundId,
         bytes32 indexed contentIdHash,
-        address indexed owner
+        address indexed owner,
+        uint128 totalRaisedAtCancel
     );
 
     event ContractPaused();
@@ -154,7 +163,10 @@ contract FarcasterCrowdfund is ERC721, Ownable, ReentrancyGuard, Pausable {
      * @param crowdfundId ID of the crowdfund to check
      */
     modifier crowdfundExists(uint128 crowdfundId) {
-        if (crowdfundId >= _crowdfundIdCounter || crowdfunds[crowdfundId].owner == address(0)) {
+        if (
+            crowdfundId >= _crowdfundIdCounter ||
+            crowdfunds[crowdfundId].owner == address(0)
+        ) {
             revert CrowdfundDoesNotExist(crowdfundId);
         }
         _;
@@ -211,13 +223,16 @@ contract FarcasterCrowdfund is ERC721, Ownable, ReentrancyGuard, Pausable {
         uint64 duration,
         bytes32 contentIdHash
     ) external whenNotPaused returns (uint128 crowdfundId) {
-        if (fundraisingTarget == 0) revert InvalidFundingTarget(fundraisingTarget);
+        if (fundraisingTarget == 0)
+            revert InvalidFundingTarget(fundraisingTarget);
         if (duration == 0) revert InvalidDuration(duration);
-        if (duration > maxDuration) revert DurationExceedsMax(duration, maxDuration);
+        if (duration > maxDuration)
+            revert DurationExceedsMax(duration, maxDuration);
 
         // Check contentId uniqueness if not empty hash
         if (contentIdHash != bytes32(0)) {
-            if (contentIdHashUsed[contentIdHash]) revert ContentIdHashAlreadyUsed(contentIdHash);
+            if (contentIdHashUsed[contentIdHash])
+                revert ContentIdHashAlreadyUsed(contentIdHash);
             contentIdHashUsed[contentIdHash] = true;
         }
 
@@ -268,12 +283,14 @@ contract FarcasterCrowdfund is ERC721, Ownable, ReentrancyGuard, Pausable {
         Crowdfund storage cf = crowdfunds[crowdfundId];
 
         if (amount == 0) revert AmountMustBeGreaterThanZero(amount);
-        if (block.timestamp >= cf.endTimestamp) revert CrowdfundHasEnded(crowdfundId, cf.endTimestamp);
+        if (block.timestamp >= cf.endTimestamp)
+            revert CrowdfundHasEnded(crowdfundId, cf.endTimestamp);
         if (cf.cancelled) revert ErrorCrowdfundCancelled(crowdfundId);
 
         // Check donationId uniqueness if not empty hash
         if (donationIdHash != bytes32(0)) {
-            if (donationIdHashUsed[donationIdHash]) revert DonationIdHashAlreadyUsed(donationIdHash);
+            if (donationIdHashUsed[donationIdHash])
+                revert DonationIdHashAlreadyUsed(donationIdHash);
             donationIdHashUsed[donationIdHash] = true;
         }
 
@@ -333,9 +350,12 @@ contract FarcasterCrowdfund is ERC721, Ownable, ReentrancyGuard, Pausable {
     ) external whenNotPaused crowdfundExists(crowdfundId) nonReentrant {
         Crowdfund storage cf = crowdfunds[crowdfundId];
 
-        if (msg.sender != cf.owner) revert CrowdfundOwnerRequired(crowdfundId, msg.sender, cf.owner);
-        if (block.timestamp <= cf.endTimestamp) revert CrowdfundNotEnded(crowdfundId, cf.endTimestamp);
-        if (cf.totalRaised < cf.goal) revert GoalNotMet(crowdfundId, cf.goal, cf.totalRaised);
+        if (msg.sender != cf.owner)
+            revert CrowdfundOwnerRequired(crowdfundId, msg.sender, cf.owner);
+        if (block.timestamp <= cf.endTimestamp)
+            revert CrowdfundNotEnded(crowdfundId, cf.endTimestamp);
+        if (cf.totalRaised < cf.goal)
+            revert GoalNotMet(crowdfundId, cf.goal, cf.totalRaised);
         if (cf.fundsClaimed) revert FundsAlreadyClaimed(crowdfundId);
         if (cf.cancelled) revert ErrorCrowdfundCancelled(crowdfundId);
 
@@ -370,14 +390,15 @@ contract FarcasterCrowdfund is ERC721, Ownable, ReentrancyGuard, Pausable {
 
         if (
             !(block.timestamp >= cf.endTimestamp && cf.totalRaised < cf.goal) &&
-                !cf.cancelled
+            !cf.cancelled
         ) {
             revert RefundsNotAvailable(crowdfundId);
         }
         if (cf.fundsClaimed) revert FundsAlreadyClaimedByOwner(crowdfundId);
 
         uint128 donationAmount = donations[crowdfundId][msg.sender];
-        if (donationAmount == 0) revert NoDonationToRefund(crowdfundId, msg.sender);
+        if (donationAmount == 0)
+            revert NoDonationToRefund(crowdfundId, msg.sender);
 
         // Effects: Reset donation amount to prevent re-entrancy
 
@@ -413,31 +434,36 @@ contract FarcasterCrowdfund is ERC721, Ownable, ReentrancyGuard, Pausable {
     ) external crowdfundExists(crowdfundId) {
         Crowdfund storage cf = crowdfunds[crowdfundId];
 
-        if (msg.sender != cf.owner) revert CrowdfundOwnerRequired(crowdfundId, msg.sender, cf.owner);
+        if (msg.sender != cf.owner)
+            revert CrowdfundOwnerRequired(crowdfundId, msg.sender, cf.owner);
         if (cf.fundsClaimed) revert FundsAlreadyClaimed(crowdfundId);
         if (cf.cancelled) revert ErrorCrowdfundCancelled(crowdfundId);
 
         cf.cancelled = true;
 
-        emit CrowdfundCancelled(crowdfundId, cf.contentIdHash, cf.owner);
+        // Emit the event with the total raised amount at the time of cancellation
+        emit CrowdfundCancelled(
+            crowdfundId,
+            cf.contentIdHash,
+            cf.owner,
+            cf.totalRaised
+        );
     }
 
     /**
-     * @notice Issue batch refunds for a failed crowdfund.
+     * @notice Issue batch refunds for a crowdfund that is either
+     *      (a) **cancelled (any time)**   OR
+     *      (b) **ended without meeting goal**.
+     *
      * @dev Requirements:
-     *      - block.timestamp >= endTimestamp
-     *      - totalRaised < goal
-     *      - !cancelled
-     *      - !fundsClaimed
+     *      - (cancelled || ended) & !fundsClaimed
+     *      - If goal was met, crowdfund **must be cancelled**; otherwise refund not allowed
      *      - startIndex < uniqueDonorsList[crowdfundId].length
-     * @param crowdfundId ID of the crowdfund to process refunds for.
-     * @param startIndex Starting index in the unique donors list.
-     * @param batchSize Number of donors to process in this batch.
-     * @custom:reverts "Crowdfund has not ended yet" if before endTimestamp.
-     * @custom:reverts "Crowdfund goal was met" if totalRaised >= goal.
-     * @custom:reverts "Crowdfund was cancelled" if cancelled == true.
-     * @custom:reverts "Funds already claimed by owner" if fundsClaimed == true.
-     * @custom:reverts "Start index out of bounds" if startIndex >= donorsCount.
+     *
+     * @custom:reverts CrowdfundNotEnded            if still active & not cancelled
+     * @custom:reverts CrowdfundGoalWasMet          if goal reached but creator didn't cancel
+     * @custom:reverts FundsAlreadyClaimedByOwner   if owner already withdrew
+     * @custom:reverts StartIndexOutOfBounds        if startIndex >= donorsCount.
      */
     function pushRefunds(
         uint128 crowdfundId,
@@ -446,17 +472,26 @@ contract FarcasterCrowdfund is ERC721, Ownable, ReentrancyGuard, Pausable {
     ) external whenNotPaused crowdfundExists(crowdfundId) nonReentrant {
         Crowdfund storage cf = crowdfunds[crowdfundId];
 
-        // Check refund conditions: ended, goal not met, not cancelled, funds not claimed
-        if (block.timestamp < cf.endTimestamp) revert CrowdfundNotEnded(crowdfundId, cf.endTimestamp);
-        if (cf.totalRaised >= cf.goal) revert CrowdfundGoalWasMet(crowdfundId, cf.goal, cf.totalRaised);
-        if (cf.cancelled) revert CrowdfundWasCancelled(crowdfundId);
+        // --- Refund‑eligibility gate  --- // 
+        if (!(cf.cancelled || block.timestamp >= cf.endTimestamp)) {
+            // still active (not‑cancelled AND before deadline) → can't refund
+            revert CrowdfundNotEnded(crowdfundId, cf.endTimestamp);
+        }
+
+        // creator already claimed the funds → nothing to refund
         if (cf.fundsClaimed) revert FundsAlreadyClaimedByOwner(crowdfundId);
+
+        // crowdfund goal was met but creator has not cancelled → refunds not allowed
+        if (cf.totalRaised >= cf.goal && !cf.cancelled) {
+            revert CrowdfundGoalWasMet(crowdfundId, cf.goal, cf.totalRaised);
+        }
 
         address[] storage donors = uniqueDonorsList[crowdfundId];
         uint256 donorsCount = donors.length;
 
         // Validate batch parameters
-        if (startIndex >= donorsCount) revert StartIndexOutOfBounds(startIndex, donorsCount);
+        if (startIndex >= donorsCount)
+            revert StartIndexOutOfBounds(startIndex, donorsCount);
 
         // Calculate the actual batch size (might be smaller than requested)
         uint256 endIndex = startIndex + batchSize;
@@ -703,12 +738,7 @@ contract FarcasterCrowdfund is ERC721, Ownable, ReentrancyGuard, Pausable {
         uint128 crowdfundId = tokenToCrowdfund[tokenId];
 
         return
-            string(
-                abi.encodePacked(
-                    _baseMetadataURI,
-                    toString(crowdfundId)
-                )
-            );
+            string(abi.encodePacked(_baseMetadataURI, toString(crowdfundId)));
     }
 
     // ----- Internal functions -----
