@@ -11,12 +11,12 @@ contract DeployBase is Script {
     // Base URI for NFT metadata
     string public constant BASE_URI = "https://crowdfund.seedclub.com/crowdfund/";
     
-    // Maximum crowdfund duration (7 days)
-    uint64 public constant MAX_DURATION = 7 days;
+    // Maximum crowdfund duration (14 days)
+    uint64 public constant MAX_DURATION = 14 days;
 
     function run() public {
         // Retrieve deployer private key from env variable
-        uint256 deployerPrivateKey = vm.envUint("GOERLI_PRIV_KEY");
+        uint256 deployerPrivateKey = vm.envUint("SEEDCLUB_PRIV_KEY");
         address deployerAddress = vm.addr(deployerPrivateKey);
         
         console.log("Deployer address:", deployerAddress);

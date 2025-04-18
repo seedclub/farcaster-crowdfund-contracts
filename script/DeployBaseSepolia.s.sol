@@ -6,8 +6,6 @@ import {FarcasterCrowdfund} from "../src/FarcasterCrowdfund.sol";
 
 contract DeployBaseSepolia is Script {
     // Base Sepolia Testnet USDC address
-    // This is the USDC address on Base Sepolia - if USDC is not available,
-    // you may need to deploy a mock USDC token or use a different stablecoin
     address public constant USDC_ADDRESS = 0x036CbD53842c5426634e7929541eC2318f3dCF7e; // Update this if needed
     
     // Base URI for NFT metadata
