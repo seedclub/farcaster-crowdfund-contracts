@@ -2,186 +2,179 @@
 
 A decentralized crowdfunding platform built for the Farcaster ecosystem, allowing users to create and contribute to crowdfunding campaigns with NFT rewards for donors.
 
-**Documentation & Prototypes:**
-- [PRD (Product Requirements Document)](https://docs.google.com/document/d/1pKOuC1SWLjoGwhF4qI1B0T2kpM9mQ1MNSxJ1shnZWqI/edit?tab=t.0)
-- [v0 Mockup](https://v0-farcaster-fundraise.vercel.app/)
+**Documentation & Prototypes**
+
+* [PRD (Product Requirements Document)](https://docs.google.com/document/d/1pKOuC1SWLjoGwhF4qI1B0T2kpM9mQ1MNSxJ1shnZWqI/edit?usp=sharing)
+* [v0 Mock‑up](https://v0-farcaster-fundraise.vercel.app/)
 
 ## Overview
 
-Farcaster Crowdfund is a mini-app built on Farcaster Frames that enables users to:
+Farcaster Crowdfund is a mini‑app built on Farcaster Frames that enables users to …
 
-- Create crowdfunding campaigns with custom goals, descriptions, and images
-- Donate USDC to campaigns and automatically receive an NFT
-- Share campaigns through Farcaster cast intents
-- Receive notifications about campaign updates
-- Claim funds as creators of successful campaigns
-- Claim refunds for unsuccessful campaigns
+* Create crowdfunding campaigns with custom goals, descriptions, and images
+* Donate USDC to campaigns and automatically receive an NFT
+* Share campaigns through Farcaster cast intents
+* Receive notifications about campaign updates
+* Claim funds as creators of successful campaigns
+* Claim refunds for unsuccessful campaigns
 
 ## Repository Structure
 
-```
+```text
 farcaster-crowdfund/
-├── src/                       # Smart contract source files
-│   └── FarcasterCrowdfund.sol # Main contract implementation
-├── test/                      # Test files
-│   ├── FarcasterCrowdfund.t.sol # Main contract tests
-│   └── mocks/                 # Mock contracts for testing
-│       └── MockERC20.sol      # Mock USDC implementation
-├── script/                    # Deployment scripts
-│   ├── DeployBase.s.sol       # Base Mainnet deployment
-│   └── DeployBaseSepolia.s.sol # Base Sepolia deployment
-├── frontend/                  # Frontend code (React)
-├── api/                       # Backend API code
-├── .env.example               # Example environment variables
-├── foundry.toml               # Foundry configuration
-└── README.md                  # Project documentation
-```
+├── src/
+│   └── FarcasterCrowdfund.sol      # main contract
+├── test/
+│   ├── Base_FarcasterCrowdfund.t.sol   # shared fixture
+│   ├── Create.t.sol, Donate.t.sol …    # feature‑group tests
+│   ├── FarcasterCrowdfund_EdgeFuzz.t.sol # gap‑coverage & fuzz
+│   ├── Invariants.t.sol                 # long‑running invariants
+│   └── mocks/
+│       ├── MockERC20.sol
+│       └── GrumpyToken.sol          # ERC‑20 that can revert
+├── script/
+│   ├── DeployBase.s.sol            # Base main‑net
+│   └── DeployBaseSepolia.s.sol     # Base Sepolia
+├── frontend/                        # React front‑end (frames)
+├── api/                             # Back‑end helpers
+├── .env.example
+├── foundry.toml
+└── README.md
 
-## Smart Contract
 
-The `FarcasterCrowdfund` contract provides the core functionality for the platform:
 
-- ERC721-compliant NFT minting for donors
-- USDC-based crowdfunding
-- Automatic NFT issuance upon donation
-- Farcaster ID integration
-- Built-in refund mechanisms
-- Emergency pause functionality
+⸻
 
-## Prerequisites
+Smart Contract Highlights
+	•	ERC‑721 NFTs for donors (tokenURI points to campaign‑id)
+	•	USDC‑denominated crowdfunding with goal / deadline
+	•	Automatic refunds or creator claims
+	•	“Batch‑push” refunds to reduce donor gas
+	•	Emergency pause() switch
+	•	Written in Solidity 0.8.19, fully checked with ReentrancyGuard
 
-- [Foundry](https://book.getfoundry.sh/getting-started/installation) for smart contract development
-- [Node.js](https://nodejs.org/) (v16+) for frontend development
-- An Ethereum wallet with private key access
-- ETH on Base or Base Sepolia for contract deployment
+⸻
 
-## Setup
+Prerequisites
+	•	Foundry tool‑chain
+	•	Node.js ≥ 16 (LTS) for the front‑end
+	•	An Ethereum wallet (private key) with ETH on Base (or Base Sepolia)
+	•	USDC on the target chain for realistic testing
 
-1. Clone the repository:
+⸻
 
-```bash
+Setup
+
 git clone https://github.com/seedclub/farcaster-crowdfund.git
 cd farcaster-crowdfund
-```
 
-2. Install dependencies:
-
-```bash
-forge install
+forge install                  # solidity dependencies
 cd frontend && npm install && cd ..
-```
 
-3. Set up your environment variables:
+Create a local env‑file and set keys:
 
-```bash
-export GOERLI_PRIV_KEY=your_private_key_here
-export BASESCAN_API_KEY=your_basescan_api_key
-```
-
-4. Create a `.env` file based on `.env.example`:
-
-```bash
 cp .env.example .env
-```
 
-## Testing
+#  used by forge script … --private-key
+export BASE_PRIV_KEY=0xYOUR_PRIVATE_KEY
 
-Run the contract tests:
+#  used by forge script … --etherscan-api-key
+export BASESCAN_API_KEY=YourBaseScanKey
 
-```bash
+
+
+⸻
+
+Testing
+
+forge test -vvv                     # all contracts
+forge test --match-contract Donate  # only Donate.t.sol
+
+Coverage run
+
+forge coverage -vvv
+genhtml lcov.info --output-directory coverage
+open coverage/index.html            # on macOS
+
+Gas-tight compile
+
 forge test -vvv
-```
 
-For specific test files:
 
-```bash
-forge test --match-path test/FarcasterCrowdfund.t.sol -vvv
-```
+⸻
 
-For gas reporting:
+Deployment
 
-```bash
-forge test --gas-report
-```
+We always compile scripts with the prod profile to keep byte‑code identical to main‑net expectations.
 
-## Deployment
+Deploy to Base Sepolia
 
-### Deploy to Base Sepolia Testnet
+forge script script/DeployBaseSepolia.s.sol:DeployBaseSepolia \
+  --rpc-url       https://sepolia.base.org \
+  --broadcast --verify \
+  --private-key   $GOERLI_PRIV_KEY \
+  --etherscan-api-key $BASESCAN_API_KEY
 
-```bash
-forge script script/DeployBaseSepolia.s.sol:DeployBaseSepolia --rpc-url https://sepolia.base.org --broadcast --verify --private-key $GOERLI_PRIV_KEY --etherscan-api-key $BASESCAN_API_KEY
-```
+Deploy to Base Main‑net
 
-### Deploy to Base Mainnet
+forge script script/DeployBase.s.sol:DeployBase \
+  --rpc-url       https://mainnet.base.org \
+  --broadcast --verify \
+  --private-key   $SEEDCLUB_PRIV_KEY \
+  --etherscan-api-key $BASESCAN_API_KEY
 
-```bash
-forge script script/DeployBase.s.sol:DeployBase --rpc-url https://mainnet.base.org --broadcast --verify --private-key $GOERLI_PRIV_KEY --etherscan-api-key $BASESCAN_API_KEY
-```
 
-## Important Addresses
 
-- Base Mainnet USDC: `0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913`
-- Base Sepolia USDC: `0x036CbD53842c5426634e7929541eC2318f3dCF7e` (verify this address)
+⸻
 
-## Contract Configuration
+Important Addresses
 
-The deployed contract has the following configuration:
+network	USDC address
+Base Main‑net	0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913
+Base Sepolia	0x036CbD53842c5426634e7929541eC2318f3dCF7e (verify)
 
-- ERC721 Name: "Farcaster Crowdfund"
-- ERC721 Symbol: "CROWDFUND"
-- Maximum Crowdfund Duration: 7 days (configurable by owner)
-- Base URI: Configurable base URL for NFT metadata
 
-## Owner Functions
 
-As the contract owner, you can:
+⸻
 
-1. Change the base URI for NFT metadata
-2. Update the maximum allowed duration for crowdfunds
-3. Pause the creation of new crowdfunds
+Contract Configuration
+	•	ERC‑721 Name: “Farcaster Crowdfund”
+	•	Symbol: “CROWDFUND”
+	•	Max crowdfund duration: 7 days (owner‑configurable)
+	•	Base URI: owner‑configurable for metadata
 
-Example of updating the base URI:
+Owner helper — update base URI
 
-```bash
-cast send --private-key $GOERLI_PRIV_KEY \
+cast send --private-key $BASE_PRIV_KEY \
   --rpc-url https://mainnet.base.org \
   <CONTRACT_ADDRESS> \
   "setBaseURI(string)" \
-  "https://new-metadata-url.com/nfts/"
-```
+  "https://new‑metadata‑url.com/nfts/"
 
-## NFT Metadata
 
-The contract expects NFT metadata to be served from:
 
-```
+⸻
+
+NFT Metadata Convention
+
 {baseURI}/{crowdfundId}/{tokenId}
-```
 
-Example metadata format:
+Example (JSON):
 
-```json
 {
   "name": "Farcaster Crowdfund #42",
-  "description": "Contribution to 'Rent karaoke room for Farcon 2025'",
+  "description": "Contribution to 'Rent karaoke room for FarCon 2025'",
   "image": "https://crowdfund.seedclub.com/images/42.png",
   "attributes": [
-    {
-      "trait_type": "Crowdfund",
-      "value": "Rent karaoke room for Farcon 2025"
-    },
-    {
-      "trait_type": "Contributor",
-      "value": "0x1234..."
-    },
-    {
-      "trait_type": "Contribution Date",
-      "value": "2025-04-01"
-    }
+    { "trait_type": "Crowdfund",     "value": "Rent karaoke room for FarCon 2025" },
+    { "trait_type": "Contributor",   "value": "0x1234…" },
+    { "trait_type": "Contribution Date", "value": "2025‑04‑01" }
   ]
 }
-```
 
-## License
 
-This project is licensed under the MIT License - see the LICENSE file for details.
+
+⸻
+
+License
+MIT
