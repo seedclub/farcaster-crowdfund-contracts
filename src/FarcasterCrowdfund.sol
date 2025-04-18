@@ -23,13 +23,13 @@ contract FarcasterCrowdfund is ERC721, Ownable, ReentrancyGuard, Pausable {
     error DurationExceedsMax(uint64 duration, uint64 maxDuration);
     error ContentIdHashAlreadyUsed(bytes32 contentIdHash);
     error AmountMustBeGreaterThanZero(uint128 amount);
-    error CrowdfundHasEnded(uint128 crowdfundId, uint64 endTimestamp);
-    error ErrorCrowdfundCancelled(uint128 crowdfundId);
+    error CrowdfundEnded(uint128 crowdfundId, uint64 endTimestamp);
+    error CrowdfundIsCancelled(uint128 crowdfundId);
     error DonationIdHashAlreadyUsed(bytes32 donationIdHash);
     error CrowdfundOwnerRequired(
         uint128 crowdfundId,
         address caller,
-        address owner
+        address creator
     );
     error CrowdfundNotEnded(uint128 crowdfundId, uint64 endTimestamp);
     error GoalNotMet(uint128 crowdfundId, uint128 goal, uint128 totalRaised);
@@ -41,8 +41,6 @@ contract FarcasterCrowdfund is ERC721, Ownable, ReentrancyGuard, Pausable {
         uint128 goal,
         uint128 totalRaised
     );
-    error CrowdfundWasCancelled(uint128 crowdfundId);
-    error FundsAlreadyClaimedByOwner(uint128 crowdfundId);
     error StartIndexOutOfBounds(uint256 startIndex, uint256 count);
     error CannotWithdrawUSDC();
     error TokenDoesNotExist(uint256 tokenId);
@@ -56,7 +54,7 @@ contract FarcasterCrowdfund is ERC721, Ownable, ReentrancyGuard, Pausable {
         uint128 totalRaised; // Total amount raised in USDC (with 6 decimals)
         uint64 endTimestamp; // Timestamp when the crowdfund ends
         bytes32 contentIdHash; // Hash of the Content ID. Facilitates indexing offchain. bytes32(0) if none
-        address owner; // Address of the crowdfund creator
+        address creator; // Address of the crowdfund creator
         bool fundsClaimed; // Whether the funds have been claimed
         bool cancelled; // Whether the crowdfund has been cancelled
     }
@@ -102,7 +100,7 @@ contract FarcasterCrowdfund is ERC721, Ownable, ReentrancyGuard, Pausable {
     event CrowdfundCreated(
         uint128 indexed crowdfundId,
         bytes32 indexed contentIdHash,
-        address indexed owner,
+        address indexed creator,
         uint128 fundingTarget,
         uint64 endTimestamp
     );
@@ -118,7 +116,7 @@ contract FarcasterCrowdfund is ERC721, Ownable, ReentrancyGuard, Pausable {
     event FundsClaimed(
         uint128 indexed crowdfundId,
         bytes32 indexed contentIdHash,
-        address indexed owner,
+        address indexed creator,
         uint128 amount
     );
 
@@ -132,7 +130,7 @@ contract FarcasterCrowdfund is ERC721, Ownable, ReentrancyGuard, Pausable {
     event CrowdfundCancelled(
         uint128 indexed crowdfundId,
         bytes32 indexed contentIdHash,
-        address indexed owner,
+        address indexed creator,
         uint128 totalRaisedAtCancel
     );
 
@@ -165,7 +163,7 @@ contract FarcasterCrowdfund is ERC721, Ownable, ReentrancyGuard, Pausable {
     modifier crowdfundExists(uint128 crowdfundId) {
         if (
             crowdfundId >= _crowdfundIdCounter ||
-            crowdfunds[crowdfundId].owner == address(0)
+            crowdfunds[crowdfundId].creator == address(0)
         ) {
             revert CrowdfundDoesNotExist(crowdfundId);
         }
@@ -178,17 +176,17 @@ contract FarcasterCrowdfund is ERC721, Ownable, ReentrancyGuard, Pausable {
      * @dev Constructor sets up the ERC721 token and USDC address
      * @param _usdc The address of the USDC token contract
      * @param initialOwner The initial owner of the contract
-     * @param baseURI The base URI for NFT metadata
+     * @param _baseURI The base URI for NFT metadata
      * @param _maxDuration The maximum duration allowed for crowdfunds (in seconds)
      */
     constructor(
         address _usdc,
         address initialOwner,
-        string memory baseURI,
+        string memory _baseURI,
         uint64 _maxDuration
     ) ERC721("Farcaster Crowdfunds", "CROWDFUND") Ownable(initialOwner) {
         usdc = IERC20(_usdc);
-        _baseMetadataURI = baseURI;
+        _baseMetadataURI = _baseURI;
         maxDuration = _maxDuration > 0 ? _maxDuration : 7 days; // Default to 7 days if not specified
     }
 
@@ -243,7 +241,7 @@ contract FarcasterCrowdfund is ERC721, Ownable, ReentrancyGuard, Pausable {
             totalRaised: 0,
             endTimestamp: uint64(block.timestamp) + duration,
             contentIdHash: contentIdHash,
-            owner: msg.sender,
+            creator: msg.sender,
             fundsClaimed: false,
             cancelled: false
         });
@@ -284,8 +282,8 @@ contract FarcasterCrowdfund is ERC721, Ownable, ReentrancyGuard, Pausable {
 
         if (amount == 0) revert AmountMustBeGreaterThanZero(amount);
         if (block.timestamp >= cf.endTimestamp)
-            revert CrowdfundHasEnded(crowdfundId, cf.endTimestamp);
-        if (cf.cancelled) revert ErrorCrowdfundCancelled(crowdfundId);
+            revert CrowdfundEnded(crowdfundId, cf.endTimestamp);
+        if (cf.cancelled) revert CrowdfundIsCancelled(crowdfundId);
 
         // Check donationId uniqueness if not empty hash
         if (donationIdHash != bytes32(0)) {
@@ -334,12 +332,12 @@ contract FarcasterCrowdfund is ERC721, Ownable, ReentrancyGuard, Pausable {
     /**
      * @notice Claim raised USDC if goal is met and campaign ended.
      * @dev Requirements:
-     *      - caller must be the crowdfund owner
+     *      - caller must be the crowdfund creator
      *      - block.timestamp > endTimestamp
      *      - totalRaised >= goal
      *      - funds not already claimed and crowdfund not cancelled
      * @param crowdfundId ID of the crowdfund to claim.
-     * @custom:reverts "Only the owner can claim funds" if caller is not owner.
+     * @custom:reverts "Only the creator can claim funds" if caller is not creator.
      * @custom:reverts "Crowdfund not ended yet" if called before endTimestamp.
      * @custom:reverts "Goal not met" if totalRaised < goal.
      * @custom:reverts "Funds already claimed" if funds have already been claimed.
@@ -350,24 +348,24 @@ contract FarcasterCrowdfund is ERC721, Ownable, ReentrancyGuard, Pausable {
     ) external whenNotPaused crowdfundExists(crowdfundId) nonReentrant {
         Crowdfund storage cf = crowdfunds[crowdfundId];
 
-        if (msg.sender != cf.owner)
-            revert CrowdfundOwnerRequired(crowdfundId, msg.sender, cf.owner);
+        if (msg.sender != cf.creator)
+            revert CrowdfundOwnerRequired(crowdfundId, msg.sender, cf.creator);
         if (block.timestamp <= cf.endTimestamp)
             revert CrowdfundNotEnded(crowdfundId, cf.endTimestamp);
         if (cf.totalRaised < cf.goal)
             revert GoalNotMet(crowdfundId, cf.goal, cf.totalRaised);
         if (cf.fundsClaimed) revert FundsAlreadyClaimed(crowdfundId);
-        if (cf.cancelled) revert ErrorCrowdfundCancelled(crowdfundId);
+        if (cf.cancelled) revert CrowdfundIsCancelled(crowdfundId);
 
         cf.fundsClaimed = true;
 
         // Transfer all USDC to the creator
-        usdc.safeTransfer(cf.owner, cf.totalRaised);
+        usdc.safeTransfer(cf.creator, cf.totalRaised);
 
         emit FundsClaimed(
             crowdfundId,
             cf.contentIdHash,
-            cf.owner,
+            cf.creator,
             cf.totalRaised
         );
     }
@@ -376,11 +374,11 @@ contract FarcasterCrowdfund is ERC721, Ownable, ReentrancyGuard, Pausable {
      * @notice Claim refund of donated USDC if campaign failed or cancelled.
      * @dev Requirements:
      *      - campaign ended without meeting goal or was cancelled
-     *      - funds not already claimed by owner
+     *      - funds not already claimed by creator
      *      - donor must have a non-zero donation
      * @param crowdfundId ID of the crowdfund to refund.
      * @custom:reverts "Refunds not available - goal met or crowdfund still active or cancelled" if conditions not met.
-     * @custom:reverts "Funds already claimed by crowdfund creator" if owner has already claimed funds.
+     * @custom:reverts "Funds already claimed" if funds have already been claimed.
      * @custom:reverts "No donation to refund" if user has no donation.
      */
     function claimRefund(
@@ -394,7 +392,7 @@ contract FarcasterCrowdfund is ERC721, Ownable, ReentrancyGuard, Pausable {
         ) {
             revert RefundsNotAvailable(crowdfundId);
         }
-        if (cf.fundsClaimed) revert FundsAlreadyClaimedByOwner(crowdfundId);
+        if (cf.fundsClaimed) revert FundsAlreadyClaimed(crowdfundId);
 
         uint128 donationAmount = donations[crowdfundId][msg.sender];
         if (donationAmount == 0)
@@ -421,23 +419,24 @@ contract FarcasterCrowdfund is ERC721, Ownable, ReentrancyGuard, Pausable {
     /**
      * @notice Cancel an active crowdfund to enable donor refunds.
      * @dev Requirements:
-     *      - caller must be the crowdfund owner
+     *      - caller must be the crowdfund creator
      *      - funds not already claimed
      *      - crowdfund not already cancelled
      * @param crowdfundId ID of the crowdfund to cancel.
-     * @custom:reverts "Not the crowdfund owner" if caller is not owner.
+     * @custom:reverts "Not the crowdfund creator" if caller is not creator.
      * @custom:reverts "Funds already claimed" if funds have already been claimed.
      * @custom:reverts "Already cancelled" if crowdfund was already cancelled.
+     * @custom:note The creator can cancel the crowdfund at any time before funds are claimed, regardless of goal status or deadline.
      */
     function cancelCrowdfund(
         uint128 crowdfundId
     ) external crowdfundExists(crowdfundId) {
         Crowdfund storage cf = crowdfunds[crowdfundId];
 
-        if (msg.sender != cf.owner)
-            revert CrowdfundOwnerRequired(crowdfundId, msg.sender, cf.owner);
+        if (msg.sender != cf.creator)
+            revert CrowdfundOwnerRequired(crowdfundId, msg.sender, cf.creator);
         if (cf.fundsClaimed) revert FundsAlreadyClaimed(crowdfundId);
-        if (cf.cancelled) revert ErrorCrowdfundCancelled(crowdfundId);
+        if (cf.cancelled) revert CrowdfundIsCancelled(crowdfundId);
 
         cf.cancelled = true;
 
@@ -445,7 +444,7 @@ contract FarcasterCrowdfund is ERC721, Ownable, ReentrancyGuard, Pausable {
         emit CrowdfundCancelled(
             crowdfundId,
             cf.contentIdHash,
-            cf.owner,
+            cf.creator,
             cf.totalRaised
         );
     }
@@ -479,7 +478,7 @@ contract FarcasterCrowdfund is ERC721, Ownable, ReentrancyGuard, Pausable {
         }
 
         // creator already claimed the funds → nothing to refund
-        if (cf.fundsClaimed) revert FundsAlreadyClaimedByOwner(crowdfundId);
+        if (cf.fundsClaimed) revert FundsAlreadyClaimed(crowdfundId);
 
         // crowdfund goal was met but creator has not cancelled → refunds not allowed
         if (cf.totalRaised >= cf.goal && !cf.cancelled) {
@@ -741,11 +740,31 @@ contract FarcasterCrowdfund is ERC721, Ownable, ReentrancyGuard, Pausable {
             string(abi.encodePacked(_baseMetadataURI, toString(crowdfundId)));
     }
 
+    // ----- View functions -----
+
+    /**
+     * @notice Returns the current crowdfund ID counter.
+     * @dev This indicates the ID that will be assigned to the next created crowdfund.
+     * @return The next available crowdfund ID.
+     */
+    function crowdfundIdCounter() external view returns (uint128) {
+        return _crowdfundIdCounter;
+    }
+
+    /**
+     * @notice Returns the base URI for token metadata.
+     * @return The base URI string.
+     */
+    function baseURI() external view returns (string memory) {
+        return _baseMetadataURI;
+    }
+
     // ----- Internal functions -----
 
     /**
      * @dev Utility function to convert uint to string
      * @param value The uint value to convert
+     * @return The converted string
      */
     function toString(uint256 value) internal pure returns (string memory) {
         if (value == 0) {
