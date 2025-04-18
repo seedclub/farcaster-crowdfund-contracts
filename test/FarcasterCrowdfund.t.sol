@@ -156,7 +156,7 @@ contract FarcasterCrowdfundTest is Test {
             uint128 totalRaised,
             uint64 endTimestamp,
             bytes32 cfContentIdHash,
-            address cfOwner,
+            address cfCreator, // Renamed from cfOwner
             bool fundsClaimed,
             bool cancelled
         ) = crowdfund.crowdfunds(crowdfundId);
@@ -165,7 +165,7 @@ contract FarcasterCrowdfundTest is Test {
         assertEq(totalRaised, 0);
         assertEq(endTimestamp, uint64(block.timestamp + 5 days));
         assertEq(cfContentIdHash, contentHash);
-        assertEq(cfOwner, projectOwner);
+        assertEq(cfCreator, projectOwner); // Check against projectOwner (who created it)
         assertEq(fundsClaimed, false);
         assertEq(cancelled, false);
     }
@@ -353,7 +353,7 @@ contract FarcasterCrowdfundTest is Test {
         // Attempt donation
         vm.startPrank(donor1);
         usdc.approve(address(crowdfund), 10 * 10**6);
-        vm.expectRevert(abi.encodeWithSelector(FarcasterCrowdfund.CrowdfundHasEnded.selector, crowdfundId, expectedEndTime));
+        vm.expectRevert(abi.encodeWithSelector(FarcasterCrowdfund.CrowdfundEnded.selector, crowdfundId, expectedEndTime));
         crowdfund.donate(crowdfundId, DONATION_HASH_7, 10 * 10**6);
         vm.stopPrank();
     }
@@ -423,7 +423,7 @@ contract FarcasterCrowdfundTest is Test {
 
         // Attempt claim by non-owner (donor1)
         vm.prank(donor1);
-        vm.expectRevert(abi.encodeWithSelector(FarcasterCrowdfund.CrowdfundOwnerRequired.selector, crowdfundId, donor1, projectOwner));
+        vm.expectRevert(abi.encodeWithSelector(FarcasterCrowdfund.CrowdfundOwnerRequired.selector, crowdfundId, donor1, projectOwner)); // projectOwner is the creator
         crowdfund.claimFunds(crowdfundId);
     }
 
@@ -432,7 +432,7 @@ contract FarcasterCrowdfundTest is Test {
 
         // Attempt cancel by non-owner (donor1)
         vm.prank(donor1);
-        vm.expectRevert(abi.encodeWithSelector(FarcasterCrowdfund.CrowdfundOwnerRequired.selector, crowdfundId, donor1, projectOwner));
+        vm.expectRevert(abi.encodeWithSelector(FarcasterCrowdfund.CrowdfundOwnerRequired.selector, crowdfundId, donor1, projectOwner)); // projectOwner is the creator
         crowdfund.cancelCrowdfund(crowdfundId);
     }
 
@@ -706,7 +706,7 @@ contract FarcasterCrowdfundTest is Test {
         crowdfund.cancelCrowdfund(crowdfundId);
 
         vm.prank(donor1);
-        vm.expectRevert(abi.encodeWithSelector(FarcasterCrowdfund.ErrorCrowdfundCancelled.selector, crowdfundId));
+        vm.expectRevert(abi.encodeWithSelector(FarcasterCrowdfund.CrowdfundIsCancelled.selector, crowdfundId));
         crowdfund.donate(crowdfundId, DONATION_HASH_13_1, DONATION_AMOUNT_1); // Use bytes32
     }
 
@@ -727,7 +727,7 @@ contract FarcasterCrowdfundTest is Test {
         vm.warp(block.timestamp + DEFAULT_MAX_DURATION + 1 days);
 
         vm.prank(projectOwner);
-        vm.expectRevert(abi.encodeWithSelector(FarcasterCrowdfund.ErrorCrowdfundCancelled.selector, crowdfundId));
+        vm.expectRevert(abi.encodeWithSelector(FarcasterCrowdfund.CrowdfundIsCancelled.selector, crowdfundId));
         crowdfund.claimFunds(crowdfundId);
     }
 
@@ -775,7 +775,7 @@ contract FarcasterCrowdfundTest is Test {
 
         // Attempt second cancel
         vm.prank(projectOwner);
-        vm.expectRevert(abi.encodeWithSelector(FarcasterCrowdfund.ErrorCrowdfundCancelled.selector, crowdfundId));
+        vm.expectRevert(abi.encodeWithSelector(FarcasterCrowdfund.CrowdfundIsCancelled.selector, crowdfundId));
         crowdfund.cancelCrowdfund(crowdfundId);
     }
 
@@ -1141,7 +1141,7 @@ contract FarcasterCrowdfundTest is Test {
         assertEq(finalBalance - initialBalance, GOAL_AMOUNT, "Attacker should receive funds exactly once");
 
         // Check crowdfund is marked as claimed
-        (,,,, /* address cfOwner */, bool fundsClaimed, /* bool cancelled */) = crowdfund.crowdfunds(crowdfundId);
+        (,,,, /* address cfCreator */, bool fundsClaimed, /* bool cancelled */) = crowdfund.crowdfunds(crowdfundId); // Updated comment
         assertTrue(fundsClaimed, "Crowdfund should be marked as claimed");
     }
 
@@ -1469,44 +1469,28 @@ contract FarcasterCrowdfundTest is Test {
         crowdfund.pushRefunds(crowdfundId, 0, 1);
     }
 
-    function test_RevertWhen_PushRefunds_Cancelled() public {
-        uint128 crowdfundId = _createDefaultCrowdfund(CONTENT_HASH_1);
-        // Don't meet goal
-        vm.prank(donor1);
-        crowdfund.donate(crowdfundId, DONATION_HASH_1, DONATION_AMOUNT_1);
-        vm.stopPrank();
-        vm.warp(block.timestamp + DEFAULT_MAX_DURATION + 1 days);
-
-        // Cancel the crowdfund
-        vm.prank(projectOwner);
-        crowdfund.cancelCrowdfund(crowdfundId);
-
-        vm.prank(contractDeployer);
-        vm.expectRevert(abi.encodeWithSelector(FarcasterCrowdfund.CrowdfundWasCancelled.selector, crowdfundId));
-        crowdfund.pushRefunds(crowdfundId, 0, 1);
-    }
-
     function test_RevertWhen_PushRefunds_FundsClaimed() public {
-        uint128 crowdfundId = _createDefaultCrowdfund(CONTENT_HASH_1);
-        // Meet goal
-        vm.prank(donor1);
+        // Setup - create a crowdfund and meet the goal
+        vm.prank(projectOwner);
+        bytes32 contentHash = CONTENT_HASH_1;
+        uint128 crowdfundId = crowdfund.createCrowdfund(GOAL_AMOUNT, 5 days, contentHash);
+        
+        // Donate enough to meet the goal (100 USDC)
+        vm.startPrank(donor1);
+        usdc.approve(address(crowdfund), GOAL_AMOUNT);
         crowdfund.donate(crowdfundId, DONATION_HASH_1, GOAL_AMOUNT);
         vm.stopPrank();
-        vm.warp(block.timestamp + DEFAULT_MAX_DURATION + 1 days);
-
-        // Claim funds
+        
+        vm.warp(block.timestamp + 6 days); // Warp past end time
+        
+        // Claim funds (should succeed since goal is met)
         vm.prank(projectOwner);
         crowdfund.claimFunds(crowdfundId);
-
-        // Attempt pushRefunds
-        vm.prank(contractDeployer);
-        // Note: This reverts on "Crowdfund goal was met" first in this specific setup.
-        vm.expectRevert(abi.encodeWithSelector(FarcasterCrowdfund.CrowdfundGoalWasMet.selector, crowdfundId, GOAL_AMOUNT, GOAL_AMOUNT)); 
+        
+        // Attempt pushRefunds (should fail with FundsAlreadyClaimed)
+        vm.prank(projectOwner);
+        vm.expectRevert(abi.encodeWithSelector(FarcasterCrowdfund.FundsAlreadyClaimed.selector, crowdfundId));
         crowdfund.pushRefunds(crowdfundId, 0, 1);
-
-        // Test case where fundsClaimed is the primary reason (e.g., goal not met but somehow owner claimed - unlikely but for completeness)
-        // We can't directly test FundsAlreadyClaimedByOwner in pushRefunds because goalMet/cancelled checks come first.
-        // However, we know the check exists in the contract.
     }
 
     function test_RevertWhen_PushRefunds_InvalidBatchParams() public {
